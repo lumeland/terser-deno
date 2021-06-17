@@ -92,12 +92,64 @@ function DEFNODE(type, props, methods, base = AST_Node) {
   return ctor;
 }
 
-var AST_Token = DEFNODE(
-  "Token",
-  "type value line col pos endline endcol endpos nlb comments_before comments_after file raw quote end",
-  {},
-  null,
-);
+const has_tok_flag = (tok, flag) => Boolean(tok.flags & flag);
+const set_tok_flag = (tok, flag, truth) => {
+  if (truth) {
+    tok.flags |= flag;
+  } else {
+    tok.flags &= ~flag;
+  }
+};
+
+const TOK_FLAG_NLB = 0b0001;
+const TOK_FLAG_QUOTE_SINGLE = 0b0010;
+const TOK_FLAG_QUOTE_EXISTS = 0b0100;
+
+class AST_Token {
+  constructor(
+    type,
+    value,
+    line,
+    col,
+    pos,
+    nlb,
+    comments_before,
+    comments_after,
+    file,
+  ) {
+    this.flags = (nlb ? 1 : 0);
+
+    this.type = type;
+    this.value = value;
+    this.line = line;
+    this.col = col;
+    this.pos = pos;
+    this.comments_before = comments_before;
+    this.comments_after = comments_after;
+    this.file = file;
+
+    Object.seal(this);
+  }
+
+  get nlb() {
+    return has_tok_flag(this, TOK_FLAG_NLB);
+  }
+
+  set nlb(new_nlb) {
+    set_tok_flag(this, TOK_FLAG_NLB, new_nlb);
+  }
+
+  get quote() {
+    return !has_tok_flag(this, TOK_FLAG_QUOTE_EXISTS)
+      ? ""
+      : (has_tok_flag(this, TOK_FLAG_QUOTE_SINGLE) ? "'" : '"');
+  }
+
+  set quote(quote_type) {
+    set_tok_flag(this, TOK_FLAG_QUOTE_SINGLE, quote_type === "'");
+    set_tok_flag(this, TOK_FLAG_QUOTE_EXISTS, !!quote_type);
+  }
+}
 
 var AST_Node = DEFNODE("Node", "start end", {
   _clone: function (deep) {
@@ -175,8 +227,6 @@ function walk_body(node, visitor) {
 function clone_block_scope(deep) {
   var clone = this._clone(deep);
   if (this.block_scope) {
-    // TODO this is sometimes undefined during compression.
-    // But it should always have a value!
     clone.block_scope = this.block_scope.clone();
   }
   return clone;
@@ -371,8 +421,6 @@ var AST_Scope = DEFNODE(
     $propdoc: {
       variables:
         "[Map/S] a map of name -> SymbolDef for all variables/functions defined in this scope",
-      functions:
-        "[Map/S] like `variables`, but only lists function declarations",
       uses_with:
         "[boolean/S] tells whether this scope uses the `with` statement",
       uses_eval:
@@ -399,7 +447,6 @@ var AST_Scope = DEFNODE(
         });
       } else {
         if (this.variables) node.variables = new Map(this.variables);
-        if (this.functions) node.functions = new Map(this.functions);
         if (this.enclosed) node.enclosed = this.enclosed.slice();
         if (this._block_scope) node._block_scope = this._block_scope;
       }
@@ -512,6 +559,23 @@ var AST_Lambda = DEFNODE(
 
       if (this.name) push(this.name);
     },
+    is_braceless() {
+      return this.body[0] instanceof AST_Return && this.body[0].value;
+    },
+    // Default args and expansion don't count, so .argnames.length doesn't cut it
+    length_property() {
+      let length = 0;
+
+      for (const arg of this.argnames) {
+        if (
+          arg instanceof AST_SymbolFunarg || arg instanceof AST_Destructuring
+        ) {
+          length++;
+        }
+      }
+
+      return length;
+    },
   },
   AST_Scope,
 );
@@ -612,7 +676,7 @@ var AST_TemplateSegment = DEFNODE("TemplateSegment", "value raw", {
   $documentation: "A segment of a template string literal",
   $propdoc: {
     value: "Content of the segment",
-    raw: "Raw content of the segment",
+    raw: "Raw source of the segment",
   },
 });
 
@@ -1045,7 +1109,7 @@ var AST_PropAccess = DEFNODE("PropAccess", "expression property optional", {
   $propdoc: {
     expression: "[AST_Node] the “container” expression",
     property:
-      "[AST_Node|string] the property to access.  For AST_Dot this is always a plain string, while for AST_Sub it's an arbitrary AST_Node",
+      "[AST_Node|string] the property to access.  For AST_Dot & AST_DotHash this is always a plain string, while for AST_Sub it's an arbitrary AST_Node",
 
     optional: "[boolean] whether this is an optional property access (IE ?.)",
   },
@@ -1057,6 +1121,18 @@ var AST_Dot = DEFNODE("Dot", "quote", {
     quote:
       "[string] the original quote character when transformed from AST_Sub",
   },
+  _walk: function (visitor) {
+    return visitor._visit(this, function () {
+      this.expression._walk(visitor);
+    });
+  },
+  _children_backwards(push) {
+    push(this.expression);
+  },
+}, AST_PropAccess);
+
+var AST_DotHash = DEFNODE("DotHash", "", {
+  $documentation: "A dotted property access to a private property",
   _walk: function (visitor) {
     return visitor._visit(this, function () {
       this.expression._walk(visitor);
@@ -1084,7 +1160,7 @@ var AST_Sub = DEFNODE("Sub", null, {
 var AST_Chain = DEFNODE("Chain", "expression", {
   $documentation: "A chain expression like a?.b?.(c)?.[d]",
   $propdoc: {
-    expression: "[AST_Call|AST_Dot|AST_Sub] chain element.",
+    expression: "[AST_Call|AST_Dot|AST_DotHash|AST_Sub] chain element.",
   },
   _walk: function (visitor) {
     return visitor._visit(this, function () {
@@ -1165,8 +1241,11 @@ var AST_Conditional = DEFNODE(
   },
 );
 
-var AST_Assign = DEFNODE("Assign", null, {
+var AST_Assign = DEFNODE("Assign", "logical", {
   $documentation: "An assignment expression — `a = b + 5`",
+  $propdoc: {
+    logical: "Whether it's a logical assignment",
+  },
 }, AST_Binary);
 
 var AST_DefaultAssign = DEFNODE("DefaultAssign", null, {
@@ -1245,6 +1324,26 @@ var AST_ObjectKeyVal = DEFNODE("ObjectKeyVal", "quote", {
   },
 }, AST_ObjectProperty);
 
+var AST_PrivateSetter = DEFNODE("PrivateSetter", "static", {
+  $propdoc: {
+    static: "[boolean] whether this is a static private setter",
+  },
+  $documentation: "A private setter property",
+  computed_key() {
+    return false;
+  },
+}, AST_ObjectProperty);
+
+var AST_PrivateGetter = DEFNODE("PrivateGetter", "static", {
+  $propdoc: {
+    static: "[boolean] whether this is a static private getter",
+  },
+  $documentation: "A private getter property",
+  computed_key() {
+    return false;
+  },
+}, AST_ObjectProperty);
+
 var AST_ObjectSetter = DEFNODE("ObjectSetter", "quote static", {
   $propdoc: {
     quote: "[string|undefined] the original quote character, if any",
@@ -1284,6 +1383,10 @@ var AST_ConciseMethod = DEFNODE(
   },
   AST_ObjectProperty,
 );
+
+var AST_PrivateMethod = DEFNODE("PrivateMethod", "", {
+  $documentation: "A private class method inside a class",
+}, AST_ConciseMethod);
 
 var AST_Class = DEFNODE("Class", "name extends properties", {
   $propdoc: {
@@ -1335,6 +1438,10 @@ var AST_ClassProperty = DEFNODE("ClassProperty", "static quote", {
     return !(this.key instanceof AST_SymbolClassProperty);
   },
 }, AST_ObjectProperty);
+
+var AST_ClassPrivateProperty = DEFNODE("ClassProperty", "", {
+  $documentation: "A class property for a private property",
+}, AST_ClassProperty);
 
 var AST_DefClass = DEFNODE("DefClass", null, {
   $documentation: "A class definition",
@@ -1473,11 +1580,11 @@ var AST_String = DEFNODE("String", "value quote", {
   },
 }, AST_Constant);
 
-var AST_Number = DEFNODE("Number", "value literal", {
+var AST_Number = DEFNODE("Number", "value raw", {
   $documentation: "A number literal",
   $propdoc: {
     value: "[number] the numeric value",
-    literal: "[string] numeric value as string (optional)",
+    raw: "[string] numeric value as string",
   },
 }, AST_Constant);
 
@@ -1760,6 +1867,7 @@ export {
   AST_Chain,
   AST_Class,
   AST_ClassExpression,
+  AST_ClassPrivateProperty,
   AST_ClassProperty,
   AST_ConciseMethod,
   AST_Conditional,
@@ -1776,6 +1884,7 @@ export {
   AST_Directive,
   AST_Do,
   AST_Dot,
+  AST_DotHash,
   AST_DWLoop,
   AST_EmptyStatement,
   AST_Exit,
@@ -1813,6 +1922,9 @@ export {
   AST_ObjectProperty,
   AST_ObjectSetter,
   AST_PrefixedTemplateString,
+  AST_PrivateGetter,
+  AST_PrivateMethod,
+  AST_PrivateSetter,
   AST_PropAccess,
   AST_RegExp,
   AST_Return,

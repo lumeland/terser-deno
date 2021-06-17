@@ -68,6 +68,7 @@ import {
   AST_Chain,
   AST_Class,
   AST_ClassExpression,
+  AST_ClassPrivateProperty,
   AST_ClassProperty,
   AST_ConciseMethod,
   AST_Conditional,
@@ -83,6 +84,7 @@ import {
   AST_Directive,
   AST_Do,
   AST_Dot,
+  AST_DotHash,
   AST_EmptyStatement,
   AST_Exit,
   AST_Expansion,
@@ -112,6 +114,9 @@ import {
   AST_ObjectProperty,
   AST_ObjectSetter,
   AST_PrefixedTemplateString,
+  AST_PrivateGetter,
+  AST_PrivateMethod,
+  AST_PrivateSetter,
   AST_PropAccess,
   AST_RegExp,
   AST_Return,
@@ -243,7 +248,7 @@ function OutputStream(options) {
 
   var to_utf8 = options.ascii_only
     ? function (str, identifier) {
-      if (options.ecma >= 2015) {
+      if (options.ecma >= 2015 && !options.safari10) {
         str = str.replace(/[\ud800-\udbff][\udc00-\udfff]/g, function (ch) {
           var code = get_full_char_code(ch, 0).toString(16);
           return "\\u{" + code + "}";
@@ -771,8 +776,9 @@ function OutputStream(options) {
     var comments = token[tail ? "comments_before" : "comments_after"];
     if (!comments || printed_comments.has(comments)) return;
     if (
-      !(node instanceof AST_Statement ||
-        comments.every((c) => !/comment[134]/.test(c.type)))
+      !(node instanceof AST_Statement || comments.every((c) =>
+        !/comment[134]/.test(c.type)
+      ))
     ) {
       return;
     }
@@ -986,6 +992,14 @@ function OutputStream(options) {
 
   PARENS(AST_Arrow, function (output) {
     var p = output.parent();
+
+    if (
+      output.option("wrap_func_args") &&
+      p instanceof AST_Call &&
+      p.args.includes(this)
+    ) {
+      return true;
+    }
     return p instanceof AST_PropAccess && p.expression === this;
   });
 
@@ -1013,6 +1027,7 @@ function OutputStream(options) {
     var p = output.parent();
     return p instanceof AST_PropAccess && p.expression === this ||
       p instanceof AST_Call && p.expression === this ||
+      p instanceof AST_Binary && p.operator === "**" && p.left === this ||
       output.option("safari10") && p instanceof AST_UnaryPrefix;
   });
 
@@ -1057,6 +1072,10 @@ function OutputStream(options) {
       const so = this.operator;
 
       if (so === "??" && (po === "||" || po === "&&")) {
+        return true;
+      }
+
+      if (po === "??" && (so === "||" || so === "&&")) {
         return true;
       }
 
@@ -1446,6 +1465,9 @@ function OutputStream(options) {
     }
     output.print("`");
   });
+  DEFPRINT(AST_TemplateSegment, function (self, output) {
+    output.print_template_string_chars(self.value);
+  });
 
   AST_Arrow.DEFMETHOD("_do_print", function (output) {
     var self = this;
@@ -1454,7 +1476,7 @@ function OutputStream(options) {
       (parent instanceof AST_Binary && !(parent instanceof AST_Assign)) ||
       parent instanceof AST_Unary ||
       (parent instanceof AST_Call && self === parent.expression);
-    if (needs_parens) output.print("(");
+    if (needs_parens)output.print("(");
     if (self.async) {
       output.print("async");
       output.space();
@@ -1490,7 +1512,7 @@ function OutputStream(options) {
     } else {
       print_braced(self, output);
     }
-    if (needs_parens) output.print(")");
+    if (needs_parens)output.print(")");
   });
 
   /* -----[ exits ]----- */
@@ -1909,7 +1931,10 @@ function OutputStream(options) {
     var prop = self.property;
     var print_computed = RESERVED_WORDS.has(prop)
       ? output.option("ie8")
-      : !is_identifier_string(prop, output.option("ecma") >= 2015);
+      : !is_identifier_string(
+        prop,
+        output.option("ecma") >= 2015 || output.option("safari10"),
+      );
 
     if (self.optional) output.print("?.");
 
@@ -1929,6 +1954,15 @@ function OutputStream(options) {
       output.add_mapping(self.end);
       output.print_name(prop);
     }
+  });
+  DEFPRINT(AST_DotHash, function (self, output) {
+    var expr = self.expression;
+    expr.print(output);
+    var prop = self.property;
+
+    if (self.optional) output.print("?");
+    output.print(".#");
+    output.print_name(prop);
   });
   DEFPRINT(AST_Sub, function (self, output) {
     self.expression.print(output);
@@ -2086,7 +2120,7 @@ function OutputStream(options) {
       return output.print(make_num(key));
     }
     var print_string = RESERVED_WORDS.has(key) ? output.option("ie8") : (
-      output.option("ecma") < 2015
+      output.option("ecma") < 2015 || output.option("safari10")
         ? !is_basic_identifier_string(key)
         : !is_identifier_string(key, true)
     );
@@ -2106,7 +2140,10 @@ function OutputStream(options) {
     if (
       allowShortHand &&
       self.value instanceof AST_Symbol &&
-      is_identifier_string(self.key, output.option("ecma") >= 2015) &&
+      is_identifier_string(
+        self.key,
+        output.option("ecma") >= 2015 || output.option("safari10"),
+      ) &&
       get_name(self.value) === self.key &&
       !RESERVED_WORDS.has(self.key)
     ) {
@@ -2115,7 +2152,10 @@ function OutputStream(options) {
       allowShortHand &&
       self.value instanceof AST_DefaultAssign &&
       self.value.left instanceof AST_Symbol &&
-      is_identifier_string(self.key, output.option("ecma") >= 2015) &&
+      is_identifier_string(
+        self.key,
+        output.option("ecma") >= 2015 || output.option("safari10"),
+      ) &&
       get_name(self.value.left) === self.key
     ) {
       print_property_name(self.key, self.quote, output);
@@ -2134,6 +2174,23 @@ function OutputStream(options) {
       output.colon();
       self.value.print(output);
     }
+  });
+  DEFPRINT(AST_ClassPrivateProperty, (self, output) => {
+    if (self.static) {
+      output.print("static");
+      output.space();
+    }
+
+    output.print("#");
+
+    print_property_name(self.key.name, self.quote, output);
+
+    if (self.value) {
+      output.print("=");
+      self.value.print(output);
+    }
+
+    output.semicolon();
   });
   DEFPRINT(AST_ClassProperty, (self, output) => {
     if (self.static) {
@@ -2156,30 +2213,51 @@ function OutputStream(options) {
 
     output.semicolon();
   });
-  AST_ObjectProperty.DEFMETHOD("_print_getter_setter", function (type, output) {
-    var self = this;
-    if (self.static) {
-      output.print("static");
-      output.space();
-    }
-    if (type) {
-      output.print(type);
-      output.space();
-    }
-    if (self.key instanceof AST_SymbolMethod) {
-      print_property_name(self.key.name, self.quote, output);
-    } else {
-      output.with_square(function () {
-        self.key.print(output);
-      });
-    }
-    self.value._do_print(output, true);
-  });
+  AST_ObjectProperty.DEFMETHOD(
+    "_print_getter_setter",
+    function (type, is_private, output) {
+      var self = this;
+      if (self.static) {
+        output.print("static");
+        output.space();
+      }
+      if (type) {
+        output.print(type);
+        output.space();
+      }
+      if (self.key instanceof AST_SymbolMethod) {
+        if (is_private) output.print("#");
+        print_property_name(self.key.name, self.quote, output);
+      } else {
+        output.with_square(function () {
+          self.key.print(output);
+        });
+      }
+      self.value._do_print(output, true);
+    },
+  );
   DEFPRINT(AST_ObjectSetter, function (self, output) {
-    self._print_getter_setter("set", output);
+    self._print_getter_setter("set", false, output);
   });
   DEFPRINT(AST_ObjectGetter, function (self, output) {
-    self._print_getter_setter("get", output);
+    self._print_getter_setter("get", false, output);
+  });
+  DEFPRINT(AST_PrivateSetter, function (self, output) {
+    self._print_getter_setter("set", true, output);
+  });
+  DEFPRINT(AST_PrivateGetter, function (self, output) {
+    self._print_getter_setter("get", true, output);
+  });
+  DEFPRINT(AST_PrivateMethod, function (self, output) {
+    var type;
+    if (self.is_generator && self.async) {
+      type = "async*";
+    } else if (self.is_generator) {
+      type = "*";
+    } else if (self.async) {
+      type = "async";
+    }
+    self._print_getter_setter(type, true, output);
   });
   DEFPRINT(AST_ConciseMethod, function (self, output) {
     var type;
@@ -2190,7 +2268,7 @@ function OutputStream(options) {
     } else if (self.async) {
       type = "async";
     }
-    self._print_getter_setter(type, output);
+    self._print_getter_setter(type, false, output);
   });
   AST_Symbol.DEFMETHOD("_do_print", function (output) {
     var def = this.definition();
@@ -2213,11 +2291,8 @@ function OutputStream(options) {
     output.print_string(self.getValue(), self.quote, output.in_directive);
   });
   DEFPRINT(AST_Number, function (self, output) {
-    if (
-      (output.option("keep_numbers") || output.use_asm) && self.start &&
-      self.start.raw != null
-    ) {
-      output.print(self.start.raw);
+    if ((output.option("keep_numbers") || output.use_asm) && self.raw) {
+      output.print(self.raw);
     } else {
       output.print(make_num(self.getValue()));
     }
@@ -2233,7 +2308,9 @@ function OutputStream(options) {
     source = regexp_source_fix(source);
     flags = flags ? sort_regexp_flags(flags) : "";
     source = source.replace(r_slash_script, slash_script_replace);
+
     output.print(output.to_utf8(`/${source}/${flags}`));
+
     const parent = output.parent();
     if (
       parent instanceof AST_Binary &&

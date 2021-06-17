@@ -47,10 +47,13 @@ import { base54 } from "./scope.js";
 import {
   AST_Binary,
   AST_Call,
+  AST_ClassPrivateProperty,
   AST_Conditional,
   AST_Dot,
+  AST_DotHash,
   AST_ObjectKeyVal,
   AST_ObjectProperty,
+  AST_PrivateMethod,
   AST_Sequence,
   AST_String,
   AST_Sub,
@@ -198,7 +201,10 @@ function mangle_properties(ast, options) {
   if (!options.builtins) find_builtins(reserved);
 
   var cname = -1;
+  var cprivate = -1;
+
   var cache;
+  var private_cache = new Map();
   if (options.cache) {
     cache = options.cache.props;
     cache.forEach(function (mangled_name) {
@@ -221,13 +227,21 @@ function mangle_properties(ast, options) {
 
   var names_to_mangle = new Set();
   var unmangleable = new Set();
+  var private_properties = new Set();
 
   var keep_quoted_strict = options.keep_quoted === "strict";
 
   // step 1: find candidates to mangle
   ast.walk(
     new TreeWalker(function (node) {
-      if (node instanceof AST_ObjectKeyVal) {
+      if (
+        node instanceof AST_ClassPrivateProperty ||
+        node instanceof AST_PrivateMethod
+      ) {
+        private_properties.add(node.key.name);
+      } else if (node instanceof AST_DotHash) {
+        private_properties.add(node.property);
+      } else if (node instanceof AST_ObjectKeyVal) {
         if (
           typeof node.key == "string" &&
           (!keep_quoted_strict || !node.quote)
@@ -272,7 +286,14 @@ function mangle_properties(ast, options) {
   // step 2: transform the tree, renaming properties
   return ast.transform(
     new TreeTransformer(function (node) {
-      if (node instanceof AST_ObjectKeyVal) {
+      if (
+        node instanceof AST_ClassPrivateProperty ||
+        node instanceof AST_PrivateMethod
+      ) {
+        node.key.name = mangle_private(node.key.name);
+      } else if (node instanceof AST_DotHash) {
+        node.property = mangle_private(node.property);
+      } else if (node instanceof AST_ObjectKeyVal) {
         if (
           typeof node.key == "string" &&
           (!keep_quoted_strict || !node.quote)
@@ -355,6 +376,16 @@ function mangle_properties(ast, options) {
 
       cache.set(name, mangled);
     }
+    return mangled;
+  }
+
+  function mangle_private(name) {
+    let mangled = private_cache.get(name);
+    if (!mangled) {
+      mangled = base54(++cprivate);
+      private_cache.set(name, mangled);
+    }
+
     return mangled;
   }
 

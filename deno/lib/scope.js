@@ -62,6 +62,7 @@ import {
   AST_Defun,
   AST_Destructuring,
   AST_Dot,
+  AST_DotHash,
   AST_Export,
   AST_For,
   AST_ForIn,
@@ -301,13 +302,14 @@ AST_Scope.DEFMETHOD(
         // scope when we encounter the AST_Defun node (which is
         // instanceof AST_Scope) but we get to the symbol a bit
         // later.
-        mark_export(
-          (node.scope = defun.parent_scope.get_defun_scope()).def_function(
-            node,
-            defun,
-          ),
-          1,
-        );
+        const closest_scope = defun.parent_scope;
+
+        // In strict mode, function definitions are block-scoped
+        node.scope = tw.directives["use strict"]
+          ? closest_scope
+          : closest_scope.get_defun_scope();
+
+        mark_export(node.scope.def_function(node, defun), 1);
       } else if (node instanceof AST_SymbolClass) {
         mark_export(defun.def_variable(node, defun), 1);
       } else if (node instanceof AST_SymbolImport) {
@@ -516,7 +518,6 @@ AST_Toplevel.DEFMETHOD("def_global", function (node) {
 
 AST_Scope.DEFMETHOD("init_scope_vars", function (parent_scope) {
   this.variables = new Map(); // map name to AST_SymbolVar (variables defined in this scope; includes functions)
-  this.functions = new Map(); // map name to AST_SymbolDefun (functions defined in this scope)
   this.uses_with = false; // will be set to true if this or some nested scope uses the `with` statement
   this.uses_eval = false; // will be set to true if this or nested scope uses the global `eval`
   this.parent_scope = parent_scope; // the parent scope
@@ -529,6 +530,13 @@ AST_Scope.DEFMETHOD("conflicting_def", function (name) {
     this.enclosed.find((def) => def.name === name) ||
     this.variables.has(name) ||
     (this.parent_scope && this.parent_scope.conflicting_def(name))
+  );
+});
+
+AST_Scope.DEFMETHOD("conflicting_def_shallow", function (name) {
+  return (
+    this.enclosed.find((def) => def.name === name) ||
+    this.variables.has(name)
   );
 });
 
@@ -565,14 +573,33 @@ AST_Scope.DEFMETHOD("add_child_scope", function (scope) {
   }
 });
 
+function find_scopes_visible_from(scopes) {
+  const found_scopes = new Set();
+
+  for (const scope of new Set(scopes)) {
+    (function bubble_up(scope) {
+      if (scope == null || found_scopes.has(scope)) return;
+
+      found_scopes.add(scope);
+
+      bubble_up(scope.parent_scope);
+    })(scope);
+  }
+
+  return [...found_scopes];
+}
+
 // Creates a symbol during compression
 AST_Scope.DEFMETHOD("create_symbol", function (SymClass, {
   source,
   tentative_name,
   scope,
+  conflict_scopes = [scope],
   init = null,
 } = {}) {
   let symbol_name;
+
+  conflict_scopes = find_scopes_visible_from(conflict_scopes);
 
   if (tentative_name) {
     // Implement hygiene (no new names are conflicting with existing names)
@@ -582,7 +609,9 @@ AST_Scope.DEFMETHOD("create_symbol", function (SymClass, {
     );
 
     let i = 0;
-    while (this.conflicting_def(symbol_name)) {
+    while (
+      conflict_scopes.find((s) => s.conflicting_def_shallow(symbol_name))
+    ) {
       symbol_name = tentative_name + "$" + i++;
     }
   }
@@ -655,7 +684,6 @@ AST_Scope.DEFMETHOD("find_variable", function (name) {
 AST_Scope.DEFMETHOD("def_function", function (symbol, init) {
   var def = this.def_variable(symbol, init);
   if (!def.init || def.init instanceof AST_Defun) def.init = init;
-  this.functions.set(symbol.name, def);
   return def;
 });
 
@@ -949,7 +977,9 @@ AST_Toplevel.DEFMETHOD("compute_char_frequency", function (options) {
       if (this instanceof AST_Symbol && !this.unmangleable(options)) {
         base54.consider(this.name, -1);
       } else if (options.properties) {
-        if (this instanceof AST_Dot) {
+        if (this instanceof AST_DotHash) {
+          base54.consider("#" + this.property, -1);
+        } else if (this instanceof AST_Dot) {
           base54.consider(this.property, -1);
         } else if (this instanceof AST_Sub) {
           skip_string(this.property);

@@ -61,6 +61,7 @@ import {
   AST_Chain,
   AST_Class,
   AST_ClassExpression,
+  AST_ClassPrivateProperty,
   AST_ClassProperty,
   AST_ConciseMethod,
   AST_Conditional,
@@ -77,6 +78,7 @@ import {
   AST_Directive,
   AST_Do,
   AST_Dot,
+  AST_DotHash,
   AST_EmptyStatement,
   AST_Expansion,
   AST_Export,
@@ -107,6 +109,9 @@ import {
   AST_ObjectProperty,
   AST_ObjectSetter,
   AST_PrefixedTemplateString,
+  AST_PrivateGetter,
+  AST_PrivateMethod,
+  AST_PrivateSetter,
   AST_PropAccess,
   AST_RegExp,
   AST_Return,
@@ -397,6 +402,25 @@ import {
         static: M.static,
       });
     },
+    PropertyDefinition: function (M) {
+      let key;
+      if (M.computed) {
+        key = from_moz(M.key);
+      } else {
+        if (M.key.type !== "Identifier") {
+          throw new Error("Non-Identifier key in PropertyDefinition");
+        }
+        key = from_moz(M.key);
+      }
+
+      return new AST_ClassProperty({
+        start: my_start_token(M),
+        end: my_end_token(M),
+        key,
+        value: from_moz(M.value),
+        static: M.static,
+      });
+    },
     ArrayExpression: function (M) {
       return new AST_Array({
         start: my_start_token(M),
@@ -467,7 +491,7 @@ import {
       var imported_names = null;
       M.specifiers.forEach(function (specifier) {
         if (specifier.type === "ImportSpecifier") {
-          if (!imported_names) imported_names = [];
+          if (!imported_names)imported_names = [];
           imported_names.push(
             new AST_NameMapping({
               start: my_start_token(specifier),
@@ -479,7 +503,7 @@ import {
         } else if (specifier.type === "ImportDefaultSpecifier") {
           imported_name = from_moz(specifier.local);
         } else if (specifier.type === "ImportNamespaceSpecifier") {
-          if (!imported_names) imported_names = [];
+          if (!imported_names)imported_names = [];
           imported_names.push(
             new AST_NameMapping({
               start: my_start_token(specifier),
@@ -565,6 +589,7 @@ import {
           return new AST_String(args);
         case "number":
           args.value = val;
+          args.raw = M.raw || val.toString();
           return new AST_Number(args);
         case "boolean":
           return new (val ? AST_True : AST_False)(args);
@@ -609,7 +634,7 @@ import {
         ? (p.key === M && p.computed || p.value === M
           ? AST_SymbolRef
           : AST_SymbolMethod)
-        : p.type == "FieldDefinition"
+        : p.type == "PropertyDefinition" || p.type === "FieldDefinition"
         ? (p.key === M && p.computed || p.value === M
           ? AST_SymbolRef
           : AST_SymbolClassProperty)
@@ -960,6 +985,19 @@ import {
     };
   });
 
+  def_to_moz(AST_DotHash, function To_Moz_PrivateMemberExpression(M) {
+    return {
+      type: "MemberExpression",
+      object: to_moz(M.expression),
+      computed: false,
+      property: {
+        type: "PrivateIdentifier",
+        name: M.property,
+      },
+      optional: M.optional,
+    };
+  });
+
   def_to_moz(AST_PropAccess, function To_Moz_MemberExpression(M) {
     var isComputed = M instanceof AST_Sub;
     return {
@@ -1056,12 +1094,38 @@ import {
     } else if (M instanceof AST_ObjectSetter) {
       kind = "set";
     }
+    if (M instanceof AST_PrivateGetter || M instanceof AST_PrivateSetter) {
+      const kind = M instanceof AST_PrivateGetter ? "get" : "set";
+      return {
+        type: "MethodDefinition",
+        computed: false,
+        kind: kind,
+        static: M.static,
+        key: {
+          type: "PrivateIdentifier",
+          name: M.key.name,
+        },
+        value: to_moz(M.value),
+      };
+    }
+    if (M instanceof AST_ClassPrivateProperty) {
+      return {
+        type: "PropertyDefinition",
+        key: {
+          type: "PrivateIdentifier",
+          name: M.key.name,
+        },
+        value: to_moz(M.value),
+        computed: false,
+        static: M.static,
+      };
+    }
     if (M instanceof AST_ClassProperty) {
       return {
-        type: "FieldDefinition",
-        computed,
+        type: "PropertyDefinition",
         key,
         value: to_moz(M.value),
+        computed,
         static: M.static,
       };
     }
@@ -1097,14 +1161,22 @@ import {
         value: to_moz(M.value),
       };
     }
+
+    const key = M instanceof AST_PrivateMethod
+      ? {
+        type: "PrivateIdentifier",
+        name: M.key.name,
+      }
+      : to_moz(M.key);
+
     return {
       type: "MethodDefinition",
+      kind: M.key === "constructor" ? "constructor" : "method",
+      key,
+      value: to_moz(M.value),
       computed: !(M.key instanceof AST_Symbol) ||
         M.key instanceof AST_SymbolRef,
-      kind: M.key === "constructor" ? "constructor" : "method",
       static: M.static,
-      key: to_moz(M.key),
-      value: to_moz(M.value),
     };
   });
 
@@ -1164,24 +1236,10 @@ import {
 
   def_to_moz(AST_Constant, function To_Moz_Literal(M) {
     var value = M.value;
-    if (
-      typeof value === "number" && (value < 0 || (value === 0 && 1 / value < 0))
-    ) {
-      return {
-        type: "UnaryExpression",
-        operator: "-",
-        prefix: true,
-        argument: {
-          type: "Literal",
-          value: -value,
-          raw: M.start.raw,
-        },
-      };
-    }
     return {
       type: "Literal",
       value: value,
-      raw: M.start.raw,
+      raw: M.raw || M.print_to_string(),
     };
   });
 
@@ -1214,40 +1272,36 @@ import {
 
   /* -----[ tools ]----- */
 
-  function raw_token(moznode) {
-    if (moznode.type == "Literal") {
-      return moznode.raw != null ? moznode.raw : moznode.value + "";
-    }
-  }
-
   function my_start_token(moznode) {
     var loc = moznode.loc, start = loc && loc.start;
     var range = moznode.range;
-    return new AST_Token({
-      file: loc && loc.source,
-      line: start && start.line,
-      col: start && start.column,
-      pos: range ? range[0] : moznode.start,
-      endline: start && start.line,
-      endcol: start && start.column,
-      endpos: range ? range[0] : moznode.start,
-      raw: raw_token(moznode),
-    });
+    return new AST_Token(
+      "",
+      "",
+      start && start.line || 0,
+      start && start.column || 0,
+      range ? range[0] : moznode.start,
+      false,
+      [],
+      [],
+      loc && loc.source,
+    );
   }
 
   function my_end_token(moznode) {
     var loc = moznode.loc, end = loc && loc.end;
     var range = moznode.range;
-    return new AST_Token({
-      file: loc && loc.source,
-      line: end && end.line,
-      col: end && end.column,
-      pos: range ? range[1] : moznode.end,
-      endline: end && end.line,
-      endcol: end && end.column,
-      endpos: range ? range[1] : moznode.end,
-      raw: raw_token(moznode),
-    });
+    return new AST_Token(
+      "",
+      "",
+      end && end.line || 0,
+      end && end.column || 0,
+      range ? range[0] : moznode.end,
+      false,
+      [],
+      [],
+      loc && loc.source,
+    );
   }
 
   function map(moztype, mytype, propmap) {
@@ -1366,13 +1420,13 @@ import {
   var TO_MOZ_STACK = null;
 
   function to_moz(node) {
-    if (TO_MOZ_STACK === null) TO_MOZ_STACK = [];
+    if (TO_MOZ_STACK === null)TO_MOZ_STACK = [];
     TO_MOZ_STACK.push(node);
     var ast = node != null
       ? node.to_mozilla_ast(TO_MOZ_STACK[TO_MOZ_STACK.length - 2])
       : null;
     TO_MOZ_STACK.pop();
-    if (TO_MOZ_STACK.length === 0) TO_MOZ_STACK = null;
+    if (TO_MOZ_STACK.length === 0)TO_MOZ_STACK = null;
     return ast;
   }
 

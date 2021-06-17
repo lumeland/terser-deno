@@ -62,10 +62,8 @@ class DefaultsError extends Error {
 function defaults(args, defs, croak) {
   if (args === true) {
     args = {};
-  }
-
-  if (args != null && typeof args === "object") {
-    args = Object.assign({}, args);
+  } else if (args != null && typeof args === "object") {
+    args = { ...args };
   }
 
   const ret = args || {};
@@ -220,7 +218,7 @@ function mergeSort(array, cmp) {
 function makePredicate(words) {
   if (!Array.isArray(words)) words = words.split(" ");
 
-  return new Set(words);
+  return new Set(words.sort());
 }
 
 function map_add(map, key, value) {
@@ -259,6 +257,7 @@ function keep_name(keep_setting, name) {
 }
 
 var lineTerminatorEscape = {
+  "\0": "0",
   "\n": "n",
   "\r": "r",
   "\u2028": "u2028",
@@ -266,7 +265,8 @@ var lineTerminatorEscape = {
 };
 function regexp_source_fix(source) {
   // V8 does not escape line terminators in regexp patterns in node 12
-  return source.replace(/[\n\r\u2028\u2029]/g, function (match, offset) {
+  // We'll also remove literal \0
+  return source.replace(/[\0\n\r\u2028\u2029]/g, function (match, offset) {
     var escaped = source[offset - 1] == "\\" &&
       (source[offset - 2] != "\\" ||
         /(?:^|[^\\])(?:\\{2})*$/.test(source.slice(0, offset - 1)));

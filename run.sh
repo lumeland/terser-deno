@@ -3,7 +3,7 @@ rm -rf deno
 rm -rf terser
 
 # Clone the repo
-git clone --depth 1 --branch main https://github.com/terser/terser.git
+git clone --depth 1 --branch master https://github.com/terser/terser.git
 
 # Run the script
 deno run --unstable --allow-read=. --allow-write=. to_deno.js

@@ -95,6 +95,7 @@ export interface ManglePropertiesOptions {
 
 export interface FormatOptions {
   ascii_only?: boolean;
+  /** @deprecated Not implemented anymore */
   beautify?: boolean;
   braces?: boolean;
   comments?:
@@ -148,6 +149,8 @@ export interface MinifyOptions {
   module?: boolean;
   nameCache?: object;
   format?: FormatOptions;
+  /** @deprecated */
+  output?: FormatOptions;
   parse?: ParseOptions;
   safari10?: boolean;
   sourceMap?: boolean | SourceMapOptions;
