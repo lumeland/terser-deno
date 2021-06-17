@@ -342,9 +342,7 @@ class Compressor extends TreeWalker {
       for (var i = 0, len = def.orig.length; i < len; i++) {
         if (
           !this.toplevel[
-            def.orig[i] instanceof AST_SymbolDefun
-              ? "funcs"
-              : "vars"
+            def.orig[i] instanceof AST_SymbolDefun ? "funcs" : "vars"
           ]
         ) {
           return true;
@@ -4786,10 +4784,12 @@ AST_Scope.DEFMETHOD("hoist_properties", function (compressor) {
     AST_Binary,
     function (compressor, first_in_statement) {
       var right = this.right.drop_side_effect_free(compressor);
-      if (!right) {return this.left.drop_side_effect_free(
+      if (!right) {
+        return this.left.drop_side_effect_free(
           compressor,
           first_in_statement,
-        );}
+        );
+      }
       if (lazy_op.has(this.operator)) {
         if (right === this.right) return this;
         var node = this.clone();
@@ -5764,7 +5764,9 @@ def_optimize(AST_Call, function (self, compressor) {
               var elements = [];
               var consts = [];
               for (
-                var i = 0, len = exp.expression.elements.length; i < len; i++
+                var i = 0, len = exp.expression.elements.length;
+                i < len;
+                i++
               ) {
                 var el = exp.expression.elements[i];
                 if (el instanceof AST_Expansion) break EXIT;

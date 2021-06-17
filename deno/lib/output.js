@@ -771,9 +771,8 @@ function OutputStream(options) {
     var comments = token[tail ? "comments_before" : "comments_after"];
     if (!comments || printed_comments.has(comments)) return;
     if (
-      !(node instanceof AST_Statement || comments.every((c) =>
-        !/comment[134]/.test(c.type)
-      ))
+      !(node instanceof AST_Statement ||
+        comments.every((c) => !/comment[134]/.test(c.type)))
     ) {
       return;
     }
@@ -1455,7 +1454,7 @@ function OutputStream(options) {
       (parent instanceof AST_Binary && !(parent instanceof AST_Assign)) ||
       parent instanceof AST_Unary ||
       (parent instanceof AST_Call && self === parent.expression);
-    if (needs_parens)output.print("(");
+    if (needs_parens) output.print("(");
     if (self.async) {
       output.print("async");
       output.space();
@@ -1491,7 +1490,7 @@ function OutputStream(options) {
     } else {
       print_braced(self, output);
     }
-    if (needs_parens)output.print(")");
+    if (needs_parens) output.print(")");
   });
 
   /* -----[ exits ]----- */

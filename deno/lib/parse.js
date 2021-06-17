@@ -1147,15 +1147,14 @@ function parse($TEXT, options) {
   }, true);
 
   var S = {
-    input:
-      (typeof $TEXT == "string"
-        ? tokenizer(
-          $TEXT,
-          options.filename,
-          options.html5_comments,
-          options.shebang,
-        )
-        : $TEXT),
+    input: (typeof $TEXT == "string"
+      ? tokenizer(
+        $TEXT,
+        options.filename,
+        options.html5_comments,
+        options.shebang,
+      )
+      : $TEXT),
     token: null,
     prev: null,
     peeked: null,
@@ -2723,9 +2722,7 @@ function parse($TEXT, options) {
           new AST_ObjectKeyVal({
             start: start,
             quote: start.quote,
-            key: name instanceof AST_Node
-              ? name
-              : "" + name,
+            key: name instanceof AST_Node ? name : "" + name,
             value: value,
             end: prev(),
           }),
@@ -2759,13 +2756,13 @@ function parse($TEXT, options) {
 
     expect("{");
 
-    while (is("punc", ";"))next(); // Leading semicolons are okay in class bodies.
+    while (is("punc", ";")) next(); // Leading semicolons are okay in class bodies.
     while (!is("punc", "}")) {
       start = S.token;
       method = concise_method_or_getset(as_property_name(), start, true);
-      if (!method)unexpected();
+      if (!method) unexpected();
       a.push(method);
-      while (is("punc", ";"))next();
+      while (is("punc", ";")) next();
     }
 
     S.input.pop_directives_stack();
