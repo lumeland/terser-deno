@@ -4,4 +4,4 @@ import * as SourceMap from "https://deno.land/x/source_map@0.7.4/mod.js";
 export const MOZ_SourceMap = SourceMap;
 export type RawSourceMap = SourceMap.RawSourceMap;
 
-export { Buffer } from "https://deno.land/std@0.98.0/node/buffer.ts";
+export { Buffer } from "https://deno.land/std@0.100.0/node/buffer.ts";
