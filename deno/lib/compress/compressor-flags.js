@@ -41,73 +41,27 @@
 
  ***********************************************************************/
 
-"use strict";
-import { MOZ_SourceMap } from "./deps.ts";
-import { defaults } from "./utils/index.js";
+// bitfield flags to be stored in node.flags.
+// These are set and unset during compression, and store information in the node without requiring multiple fields.
+export const UNUSED = 0b00000001;
+export const TRUTHY = 0b00000010;
+export const FALSY = 0b00000100;
+export const UNDEFINED = 0b00001000;
+export const INLINED = 0b00010000;
 
-// a small wrapper around fitzgen's source-map library
-async function SourceMap(options) {
-  options = defaults(options, {
-    file: null,
-    root: null,
-    orig: null,
+// Nodes to which values are ever written. Used when keep_assign is part of the unused option string.
+export const WRITE_ONLY = 0b00100000;
 
-    orig_line_diff: 0,
-    dest_line_diff: 0,
-  });
+// information specific to a single compression pass
+export const SQUEEZED = 0b0000000100000000;
+export const OPTIMIZED = 0b0000001000000000;
+export const TOP = 0b0000010000000000;
+export const CLEAR_BETWEEN_PASSES = SQUEEZED | OPTIMIZED | TOP;
 
-  var orig_map;
-  var generator = new MOZ_SourceMap.SourceMapGenerator({
-    file: options.file,
-    sourceRoot: options.root,
-  });
-
-  if (options.orig) {
-    orig_map = await new MOZ_SourceMap.SourceMapConsumer(options.orig);
-    orig_map.sources.forEach(function (source) {
-      var sourceContent = orig_map.sourceContentFor(source, true);
-      if (sourceContent) {
-        generator.setSourceContent(source, sourceContent);
-      }
-    });
-  }
-
-  function add(source, gen_line, gen_col, orig_line, orig_col, name) {
-    if (orig_map) {
-      var info = orig_map.originalPositionFor({
-        line: orig_line,
-        column: orig_col,
-      });
-      if (info.source === null) {
-        return;
-      }
-      source = info.source;
-      orig_line = info.line;
-      orig_col = info.column;
-      name = info.name || name;
-    }
-    generator.addMapping({
-      generated: { line: gen_line + options.dest_line_diff, column: gen_col },
-      original: { line: orig_line + options.orig_line_diff, column: orig_col },
-      source: source,
-      name: name,
-    });
-  }
-
-  return {
-    add: add,
-    get: function () {
-      return generator;
-    },
-    toString: function () {
-      return generator.toString();
-    },
-    destroy: function () {
-      if (orig_map && orig_map.destroy) {
-        orig_map.destroy();
-      }
-    },
-  };
-}
-
-export { SourceMap };
+export const has_flag = (node, flag) => node.flags & flag;
+export const set_flag = (node, flag) => {
+  node.flags |= flag;
+};
+export const clear_flag = (node, flag) => {
+  node.flags &= ~flag;
+};

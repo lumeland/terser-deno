@@ -40,6 +40,8 @@
     SUCH DAMAGE.
 
  ***********************************************************************/
+
+"use strict";
 import {
   defaults,
   makePredicate,
@@ -153,13 +155,13 @@ import {
   walk_abort,
 } from "./ast.js";
 import {
+  ALL_RESERVED_WORDS,
   get_full_char,
   get_full_char_code,
   is_basic_identifier_string,
   is_identifier_char,
   is_identifier_string,
   PRECEDENCE,
-  RESERVED_WORDS,
 } from "./parse.js";
 
 const EXPECT_DIRECTIVE = /^$|[;{][\s\n]*$/;
@@ -1480,7 +1482,7 @@ function OutputStream(options) {
       (parent instanceof AST_Binary && !(parent instanceof AST_Assign)) ||
       parent instanceof AST_Unary ||
       (parent instanceof AST_Call && self === parent.expression);
-    if (needs_parens)output.print("(");
+    if (needs_parens) output.print("(");
     if (self.async) {
       output.print("async");
       output.space();
@@ -1516,7 +1518,7 @@ function OutputStream(options) {
     } else {
       print_braced(self, output);
     }
-    if (needs_parens)output.print(")");
+    if (needs_parens) output.print(")");
   });
 
   /* -----[ exits ]----- */
@@ -1859,7 +1861,11 @@ function OutputStream(options) {
     //    https://github.com/mishoo/UglifyJS2/issues/60
     if (noin) {
       parens = walk(node, (node) => {
-        if (node instanceof AST_Scope) return true;
+        // Don't go into scopes -- except arrow functions:
+        // https://github.com/terser/terser/issues/1019#issuecomment-877642607
+        if (node instanceof AST_Scope && !(node instanceof AST_Arrow)) {
+          return true;
+        }
         if (node instanceof AST_Binary && node.operator == "in") {
           return walk_abort; // makes walk() return true
         }
@@ -1933,7 +1939,7 @@ function OutputStream(options) {
     var expr = self.expression;
     expr.print(output);
     var prop = self.property;
-    var print_computed = RESERVED_WORDS.has(prop)
+    var print_computed = ALL_RESERVED_WORDS.has(prop)
       ? output.option("ie8")
       : !is_identifier_string(
         prop,
@@ -2123,7 +2129,7 @@ function OutputStream(options) {
       }
       return output.print(make_num(key));
     }
-    var print_string = RESERVED_WORDS.has(key) ? output.option("ie8") : (
+    var print_string = ALL_RESERVED_WORDS.has(key) ? output.option("ie8") : (
       output.option("ecma") < 2015 || output.option("safari10")
         ? !is_basic_identifier_string(key)
         : !is_identifier_string(key, true)
@@ -2149,7 +2155,7 @@ function OutputStream(options) {
         output.option("ecma") >= 2015 || output.option("safari10"),
       ) &&
       get_name(self.value) === self.key &&
-      !RESERVED_WORDS.has(self.key)
+      !ALL_RESERVED_WORDS.has(self.key)
     ) {
       print_property_name(self.key, self.quote, output);
     } else if (

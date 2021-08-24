@@ -41,6 +41,8 @@
 
  ***********************************************************************/
 
+"use strict";
+
 function characters(str) {
   return str.split("");
 }

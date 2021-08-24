@@ -41,6 +41,8 @@
     SUCH DAMAGE.
 
  ***********************************************************************/
+
+"use strict";
 import {
   characters,
   defaults,
@@ -164,9 +166,10 @@ var LATEST_TEMPLATE_END = true;
 var KEYWORDS =
   "break case catch class const continue debugger default delete do else export extends finally for function if in instanceof let new return switch throw try typeof var void while with";
 var KEYWORDS_ATOM = "false null true";
-var RESERVED_WORDS =
-  "enum implements import interface package private protected public static super this " +
-  KEYWORDS_ATOM + " " + KEYWORDS;
+var RESERVED_WORDS = "enum import super this " + KEYWORDS_ATOM + " " + KEYWORDS;
+var ALL_RESERVED_WORDS =
+  "implements interface package private protected public static " +
+  RESERVED_WORDS;
 var KEYWORDS_BEFORE_EXPRESSION =
   "return new delete throw else case yield await";
 
@@ -174,6 +177,7 @@ KEYWORDS = makePredicate(KEYWORDS);
 RESERVED_WORDS = makePredicate(RESERVED_WORDS);
 KEYWORDS_BEFORE_EXPRESSION = makePredicate(KEYWORDS_BEFORE_EXPRESSION);
 KEYWORDS_ATOM = makePredicate(KEYWORDS_ATOM);
+ALL_RESERVED_WORDS = makePredicate(ALL_RESERVED_WORDS);
 
 var OPERATOR_CHARS = makePredicate(characters("+-*&%=<>!?|~^"));
 
@@ -2815,13 +2819,13 @@ function parse($TEXT, options) {
 
     expect("{");
 
-    while (is("punc", ";"))next(); // Leading semicolons are okay in class bodies.
+    while (is("punc", ";")) next(); // Leading semicolons are okay in class bodies.
     while (!is("punc", "}")) {
       start = S.token;
       method = concise_method_or_getset(as_property_name(), start, true);
-      if (!method)unexpected();
+      if (!method) unexpected();
       a.push(method);
-      while (is("punc", ";"))next();
+      while (is("punc", ";")) next();
     }
 
     S.input.pop_directives_stack();
@@ -3717,6 +3721,7 @@ function parse($TEXT, options) {
 }
 
 export {
+  ALL_RESERVED_WORDS,
   get_full_char,
   get_full_char_code,
   is_basic_identifier_string,
@@ -3728,6 +3733,5 @@ export {
   JS_Parse_Error,
   parse,
   PRECEDENCE,
-  RESERVED_WORDS,
   tokenizer,
 };

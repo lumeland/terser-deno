@@ -491,7 +491,7 @@ import {
       var imported_names = null;
       M.specifiers.forEach(function (specifier) {
         if (specifier.type === "ImportSpecifier") {
-          if (!imported_names)imported_names = [];
+          if (!imported_names) imported_names = [];
           imported_names.push(
             new AST_NameMapping({
               start: my_start_token(specifier),
@@ -503,7 +503,7 @@ import {
         } else if (specifier.type === "ImportDefaultSpecifier") {
           imported_name = from_moz(specifier.local);
         } else if (specifier.type === "ImportNamespaceSpecifier") {
-          if (!imported_names)imported_names = [];
+          if (!imported_names) imported_names = [];
           imported_names.push(
             new AST_NameMapping({
               start: my_start_token(specifier),
@@ -1420,13 +1420,13 @@ import {
   var TO_MOZ_STACK = null;
 
   function to_moz(node) {
-    if (TO_MOZ_STACK === null)TO_MOZ_STACK = [];
+    if (TO_MOZ_STACK === null) TO_MOZ_STACK = [];
     TO_MOZ_STACK.push(node);
     var ast = node != null
       ? node.to_mozilla_ast(TO_MOZ_STACK[TO_MOZ_STACK.length - 2])
       : null;
     TO_MOZ_STACK.pop();
-    if (TO_MOZ_STACK.length === 0)TO_MOZ_STACK = null;
+    if (TO_MOZ_STACK.length === 0) TO_MOZ_STACK = null;
     return ast;
   }
 

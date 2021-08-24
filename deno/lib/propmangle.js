@@ -41,6 +41,7 @@
 
  ***********************************************************************/
 
+"use strict";
 /* global global, self */
 import { defaults, push_uniq } from "./utils/index.js";
 import { base54 } from "./scope.js";

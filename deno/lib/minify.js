@@ -1,5 +1,6 @@
 import { Buffer } from "./deps.ts";
 
+"use strict";
 /* eslint-env browser, es6, node */
 import {
   defaults,

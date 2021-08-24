@@ -40,6 +40,8 @@
     SUCH DAMAGE.
 
  ***********************************************************************/
+
+"use strict";
 import {
   defaults,
   keep_name,
@@ -103,7 +105,7 @@ import {
   TreeWalker,
   walk,
 } from "./ast.js";
-import { js_error, RESERVED_WORDS } from "./parse.js";
+import { ALL_RESERVED_WORDS, js_error } from "./parse.js";
 
 const MASK_EXPORT_DONT_MANGLE = 1 << 0;
 const MASK_EXPORT_WANT_MANGLE = 1 << 1;
@@ -710,7 +712,7 @@ function next_mangled(scope, options) {
   out:
   while (true) {
     var m = base54(++scope.cname);
-    if (RESERVED_WORDS.has(m)) continue; // skip over "do"
+    if (ALL_RESERVED_WORDS.has(m)) continue; // skip over "do"
 
     // https://github.com/mishoo/UglifyJS2/issues/242 -- do not
     // shadow a name reserved from mangling.
@@ -863,7 +865,7 @@ AST_Toplevel.DEFMETHOD("mangle_names", function (options) {
       let name;
       do {
         name = base54(++lname);
-      } while (RESERVED_WORDS.has(name));
+      } while (ALL_RESERVED_WORDS.has(name));
       node.mangled_name = name;
       return true;
     }
@@ -945,7 +947,7 @@ AST_Toplevel.DEFMETHOD("expand_names", function (options) {
     var name;
     do {
       name = base54(cname++);
-    } while (avoid.has(name) || RESERVED_WORDS.has(name));
+    } while (avoid.has(name) || ALL_RESERVED_WORDS.has(name));
     return name;
   }
 
