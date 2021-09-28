@@ -14,7 +14,11 @@ import { OutputStream } from "./output.js";
 import { Compressor } from "./compress/index.js";
 import { base54 } from "./scope.js";
 import { SourceMap } from "./sourcemap.js";
-import { mangle_properties, reserve_quoted_keys } from "./propmangle.js";
+import {
+  mangle_private_properties,
+  mangle_properties,
+  reserve_quoted_keys,
+} from "./propmangle.js";
 
 var to_ascii = typeof atob == "undefined"
   ? function (b64) {
@@ -119,6 +123,7 @@ async function minify(files, options) {
       keep_classnames: false,
       keep_fnames: false,
       module: false,
+      nth_identifier: base54,
       properties: false,
       reserved: [],
       safari10: false,
@@ -219,9 +224,9 @@ async function minify(files, options) {
   if (options.mangle) toplevel.figure_out_scope(options.mangle);
   if (timings) timings.mangle = Date.now();
   if (options.mangle) {
-    base54.reset();
     toplevel.compute_char_frequency(options.mangle);
     toplevel.mangle_names(options.mangle);
+    toplevel = mangle_private_properties(toplevel, options.mangle);
   }
   if (timings) timings.properties = Date.now();
   if (options.mangle && options.mangle.properties) {

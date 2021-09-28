@@ -333,7 +333,8 @@ export function tighten_body(statements, compressor) {
       if (
         can_replace &&
         !(node instanceof AST_SymbolDeclaration) &&
-        lhs.equivalent_to(node)
+        lhs.equivalent_to(node) &&
+        !shadows(node.scope, lvalues)
       ) {
         if (stop_if_hit) {
           abort = true;
@@ -388,7 +389,8 @@ export function tighten_body(statements, compressor) {
         node instanceof AST_PropAccess &&
           (side_effects || node.expression.may_throw_on_access(compressor)) ||
         node instanceof AST_SymbolRef &&
-          (lvalues.get(node.name) || side_effects && may_modify(node)) ||
+          ((lvalues.has(node.name) && lvalues.get(node.name).modified) ||
+            side_effects && may_modify(node)) ||
         node instanceof AST_VarDef && node.value &&
           (lvalues.has(node.name.name) ||
             side_effects && may_modify(node.name)) ||
@@ -480,7 +482,7 @@ export function tighten_body(statements, compressor) {
         var lvalues = get_lvalues(candidate);
         var lhs_local = is_lhs_local(lhs);
         if (lhs instanceof AST_SymbolRef) {
-          lvalues.set(lhs.name, false);
+          lvalues.set(lhs.name, { def: lhs.definition(), modified: false });
         }
         var side_effects = value_has_side_effects(candidate);
         var replace_all = replace_all_symbols();
@@ -884,11 +886,14 @@ export function tighten_body(statements, compressor) {
         while (sym instanceof AST_PropAccess) {
           sym = sym.expression;
         }
-        if (sym instanceof AST_SymbolRef || sym instanceof AST_This) {
-          lvalues.set(
-            sym.name,
-            lvalues.get(sym.name) || is_modified(compressor, tw, node, node, 0),
-          );
+        if (sym instanceof AST_SymbolRef) {
+          const prev = lvalues.get(sym.name);
+          if (!prev || !prev.modified) {
+            lvalues.set(sym.name, {
+              def: sym.definition(),
+              modified: is_modified(compressor, tw, node, node, 0),
+            });
+          }
         }
       });
       get_rvalue(expr).walk(tw);
@@ -1020,6 +1025,18 @@ export function tighten_body(statements, compressor) {
         }
         if (node instanceof AST_SymbolRef) {
           return node.definition().scope !== scope;
+        }
+      }
+      return false;
+    }
+
+    function shadows(newScope, lvalues) {
+      for (const { def } of lvalues.values()) {
+        let current = newScope;
+        while (current && current !== def.scope) {
+          let nested_def = current.variables.get(def.name);
+          if (nested_def && nested_def !== def) return true;
+          current = current.parent_scope;
         }
       }
       return false;

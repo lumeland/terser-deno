@@ -403,7 +403,9 @@ class Compressor extends TreeWalker {
     var passes = +this.options.passes || 1;
     var min_count = 1 / 0;
     var stopping = false;
-    var mangle = { ie8: this.option("ie8") };
+    var nth_identifier =
+      this.mangle_options && this.mangle_options.nth_identifier || base54;
+    var mangle = { ie8: this.option("ie8"), nth_identifier: nth_identifier };
     for (var pass = 0; pass < passes; pass++) {
       this._toplevel.figure_out_scope(mangle);
       if (pass === 0 && this.option("drop_console")) {
@@ -1744,6 +1746,58 @@ def_optimize(AST_Switch, function (self, compressor) {
   while (i < len) eliminate_branch(self.body[i++], body[body.length - 1]);
   self.body = body;
 
+  let default_or_exact = default_branch || exact_match;
+  default_branch = null;
+  exact_match = null;
+
+  // group equivalent branches so they will be located next to each other,
+  // that way the next micro-optimization will merge them.
+  // ** bail micro-optimization if not a simple switch case with breaks
+  if (
+    body.every((branch, i) =>
+      (branch === default_or_exact ||
+        !branch.expression.has_side_effects(compressor)) &&
+      (branch.body.length === 0 || aborts(branch) || body.length - 1 === i)
+    )
+  ) {
+    for (let i = 0; i < body.length; i++) {
+      const branch = body[i];
+      for (let j = i + 1; j < body.length; j++) {
+        const next = body[j];
+        if (next.body.length === 0) continue;
+        const last_branch = j === (body.length - 1);
+        const equivalentBranch = branches_equivalent(next, branch, false);
+        if (
+          equivalentBranch ||
+          (last_branch && branches_equivalent(next, branch, true))
+        ) {
+          if (!equivalentBranch && last_branch) {
+            next.body.push(make_node(AST_Break));
+          }
+
+          // let's find previous siblings with inert fallthrough...
+          let x = j - 1;
+          let fallthroughDepth = 0;
+          while (x > i) {
+            if (is_inert_body(body[x--])) {
+              fallthroughDepth++;
+            } else {
+              break;
+            }
+          }
+
+          const plucked = body.splice(
+            j - fallthroughDepth,
+            1 + fallthroughDepth,
+          );
+          body.splice(i + 1, 0, ...plucked);
+          i += plucked.length;
+        }
+      }
+    }
+  }
+
+  // merge equivalent branches in a row
   for (let i = 0; i < body.length; i++) {
     let branch = body[i];
     if (branch.body.length === 0) continue;
@@ -1763,10 +1817,6 @@ def_optimize(AST_Switch, function (self, compressor) {
       break;
     }
   }
-
-  let default_or_exact = default_branch || exact_match;
-  default_branch = null;
-  exact_match = null;
 
   // Prune any empty branches at the end of the switch statement.
   {
@@ -2163,10 +2213,6 @@ def_optimize(AST_Call, function (self, compressor) {
     }
   }
 
-  if (self.optional && is_nullish(fn, compressor)) {
-    return make_node(AST_Undefined, self);
-  }
-
   var is_func = fn instanceof AST_Lambda;
 
   if (is_func && fn.pinned()) return self;
@@ -2215,6 +2261,17 @@ def_optimize(AST_Call, function (self, compressor) {
   }
 
   if (compressor.option("unsafe")) {
+    if (
+      exp instanceof AST_Dot && exp.start.value === "Array" &&
+      exp.property === "from" && self.args.length === 1
+    ) {
+      const [argument] = self.args;
+      if (argument instanceof AST_Array) {
+        return make_node(AST_Array, argument, {
+          elements: argument.elements,
+        }).optimize(compressor);
+      }
+    }
     if (is_undeclared_ref(exp)) {
       switch (exp.name) {
         case "Array":
@@ -2458,6 +2515,9 @@ def_optimize(AST_Call, function (self, compressor) {
         body: [],
       }).optimize(compressor);
     }
+    var nth_identifier =
+      compressor.mangle_options && compressor.mangle_options.nth_identifier ||
+      base54;
     if (self.args.every((x) => x instanceof AST_String)) {
       // quite a corner-case, but we can handle it:
       //   https://github.com/mishoo/UglifyJS2/issues/203
@@ -2467,14 +2527,16 @@ def_optimize(AST_Call, function (self, compressor) {
           return arg.value;
         }).join(",") + "){" + self.args[self.args.length - 1].value + "})";
         var ast = parse(code);
-        var mangle = { ie8: compressor.option("ie8") };
+        var mangle = {
+          ie8: compressor.option("ie8"),
+          nth_identifier: nth_identifier,
+        };
         ast.figure_out_scope(mangle);
         var comp = new Compressor(compressor.options, {
           mangle_options: compressor.mangle_options,
         });
         ast = ast.transform(comp);
         ast.figure_out_scope(mangle);
-        base54.reset();
         ast.compute_char_frequency(mangle);
         ast.mangle_names(mangle);
         var fun;
@@ -2604,6 +2666,7 @@ def_optimize(AST_Call, function (self, compressor) {
   if (can_inline && has_annotation(self, _INLINE)) {
     set_flag(fn, SQUEEZED);
     fn = make_node(fn.CTOR === AST_Defun ? AST_Function : fn.CTOR, fn, fn);
+    fn = fn.clone(true);
     fn.figure_out_scope({}, {
       parent_scope: find_scope(compressor),
       toplevel: compressor.get_toplevel(),
@@ -3881,7 +3944,15 @@ function is_reachable(self, defs) {
     if (node instanceof AST_Scope && node !== self) {
       var parent = info.parent();
 
-      if (parent instanceof AST_Call && parent.expression === node) return;
+      if (
+        parent instanceof AST_Call &&
+        parent.expression === node &&
+        // Async/Generators aren't guaranteed to sync evaluate all of
+        // their body steps, so it's possible they close over the variable.
+        !(node.async || node.is_generator)
+      ) {
+        return;
+      }
 
       if (walk(node, find_ref)) return walk_abort;
 
@@ -4594,14 +4665,13 @@ def_optimize(AST_Sub, function (self, compressor) {
     ev = make_node_from_constant(ev, self).optimize(compressor);
     return best_of(compressor, ev, self);
   }
-  if (self.optional && is_nullish(self.expression, compressor)) {
-    return make_node(AST_Undefined, self);
-  }
   return self;
 });
 
 def_optimize(AST_Chain, function (self, compressor) {
-  self.expression = self.expression.optimize(compressor);
+  if (is_nullish(self.expression, compressor)) {
+    return make_node(AST_Undefined, self);
+  }
   return self;
 });
 
@@ -4672,9 +4742,6 @@ def_optimize(AST_Dot, function (self, compressor) {
     ev = make_node_from_constant(ev, self).optimize(compressor);
     return best_of(compressor, ev, self);
   }
-  if (self.optional && is_nullish(self.expression, compressor)) {
-    return make_node(AST_Undefined, self);
-  }
   return self;
 });
 
@@ -4740,9 +4807,11 @@ function inline_object_prop_spread(props, compressor) {
         // non-iterable value silently does nothing; it is thus safe
         // to remove. AST_String is the only iterable AST_Constant.
         props.splice(i, 1);
+        i--;
       } else if (is_nullish(expr, compressor)) {
         // Likewise, null and undefined can be silently removed.
         props.splice(i, 1);
+        i--;
       }
     }
   }
@@ -4906,12 +4975,15 @@ function lift_key(self, compressor) {
       return self;
     }
     if (self instanceof AST_ObjectKeyVal) {
+      self.quote = self.key.quote;
       self.key = self.key.value;
     } else if (self instanceof AST_ClassProperty) {
+      self.quote = self.key.quote;
       self.key = make_node(AST_SymbolClassProperty, self.key, {
         name: self.key.value,
       });
     } else {
+      self.quote = self.key.quote;
       self.key = make_node(AST_SymbolMethod, self.key, {
         name: self.key.value,
       });

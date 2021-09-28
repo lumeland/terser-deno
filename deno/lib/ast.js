@@ -1439,7 +1439,7 @@ var AST_ClassProperty = DEFNODE("ClassProperty", "static quote", {
   },
 }, AST_ObjectProperty);
 
-var AST_ClassPrivateProperty = DEFNODE("ClassProperty", "", {
+var AST_ClassPrivateProperty = DEFNODE("ClassPrivateProperty", "", {
   $documentation: "A class property for a private property",
 }, AST_ClassProperty);
 
@@ -1653,7 +1653,7 @@ var AST_True = DEFNODE("True", null, {
  * It can also return `true` to stop iteration just for child nodes.
  * Iteration can be stopped and continued by passing the `to_visit` argument,
  * which is given to the callback in the second argument.
- **/
+ */
 function walk(node, cb, to_visit = [node]) {
   const push = to_visit.push.bind(to_visit);
   while (to_visit.length) {

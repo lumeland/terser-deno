@@ -56,7 +56,6 @@ import {
   AST_Definitions,
   AST_Destructuring,
   AST_Do,
-  AST_Dot,
   AST_Exit,
   AST_Expansion,
   AST_Export,
@@ -73,6 +72,7 @@ import {
   AST_Object,
   AST_ObjectProperty,
   AST_PrefixedTemplateString,
+  AST_PropAccess,
   AST_Sequence,
   AST_SimpleStatement,
   AST_Sub,
@@ -222,7 +222,7 @@ def_transform(AST_Sequence, function (self, tw) {
   self.expressions = result.length ? result : [new AST_Number({ value: 0 })];
 });
 
-def_transform(AST_Dot, function (self, tw) {
+def_transform(AST_PropAccess, function (self, tw) {
   self.expression = self.expression.transform(tw);
 });
 

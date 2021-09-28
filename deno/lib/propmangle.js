@@ -54,7 +54,9 @@ import {
   AST_DotHash,
   AST_ObjectKeyVal,
   AST_ObjectProperty,
+  AST_PrivateGetter,
   AST_PrivateMethod,
+  AST_PrivateSetter,
   AST_Sequence,
   AST_String,
   AST_Sub,
@@ -184,17 +186,52 @@ function addStrings(node, add) {
   );
 }
 
+function mangle_private_properties(ast, options) {
+  var cprivate = -1;
+  var private_cache = new Map();
+  var nth_identifier = options.nth_identifier || base54;
+
+  ast = ast.transform(
+    new TreeTransformer(function (node) {
+      if (
+        node instanceof AST_ClassPrivateProperty ||
+        node instanceof AST_PrivateMethod ||
+        node instanceof AST_PrivateGetter ||
+        node instanceof AST_PrivateSetter
+      ) {
+        node.key.name = mangle_private(node.key.name);
+      } else if (node instanceof AST_DotHash) {
+        node.property = mangle_private(node.property);
+      }
+    }),
+  );
+  return ast;
+
+  function mangle_private(name) {
+    let mangled = private_cache.get(name);
+    if (!mangled) {
+      mangled = nth_identifier.get(++cprivate);
+      private_cache.set(name, mangled);
+    }
+
+    return mangled;
+  }
+}
+
 function mangle_properties(ast, options) {
   options = defaults(options, {
     builtins: false,
     cache: null,
     debug: false,
     keep_quoted: false,
+    nth_identifier: base54,
     only_cache: false,
     regex: null,
     reserved: null,
     undeclared: false,
   }, true);
+
+  var nth_identifier = options.nth_identifier;
 
   var reserved_option = options.reserved;
   if (!Array.isArray(reserved_option)) reserved_option = [reserved_option];
@@ -202,15 +239,10 @@ function mangle_properties(ast, options) {
   if (!options.builtins) find_builtins(reserved);
 
   var cname = -1;
-  var cprivate = -1;
 
   var cache;
-  var private_cache = new Map();
   if (options.cache) {
     cache = options.cache.props;
-    cache.forEach(function (mangled_name) {
-      reserved.add(mangled_name);
-    });
   } else {
     cache = new Map();
   }
@@ -228,30 +260,30 @@ function mangle_properties(ast, options) {
 
   var names_to_mangle = new Set();
   var unmangleable = new Set();
-  var private_properties = new Set();
+  // Track each already-mangled name to prevent nth_identifier from generating
+  // the same name.
+  cache.forEach((mangled_name) => unmangleable.add(mangled_name));
 
-  var keep_quoted_strict = options.keep_quoted === "strict";
+  var keep_quoted = !!options.keep_quoted;
 
   // step 1: find candidates to mangle
   ast.walk(
     new TreeWalker(function (node) {
       if (
         node instanceof AST_ClassPrivateProperty ||
-        node instanceof AST_PrivateMethod
+        node instanceof AST_PrivateMethod ||
+        node instanceof AST_PrivateGetter ||
+        node instanceof AST_PrivateSetter ||
+        node instanceof AST_DotHash
       ) {
-        private_properties.add(node.key.name);
-      } else if (node instanceof AST_DotHash) {
-        private_properties.add(node.property);
+        // handled by mangle_private_properties
       } else if (node instanceof AST_ObjectKeyVal) {
-        if (
-          typeof node.key == "string" &&
-          (!keep_quoted_strict || !node.quote)
-        ) {
+        if (typeof node.key == "string" && (!keep_quoted || !node.quote)) {
           add(node.key);
         }
       } else if (node instanceof AST_ObjectProperty) {
         // setter or getter, since KeyVal is handled above
-        if (!keep_quoted_strict || !node.key.end.quote) {
+        if (!keep_quoted || !node.quote) {
           add(node.key.name);
         }
       } else if (node instanceof AST_Dot) {
@@ -265,12 +297,12 @@ function mangle_properties(ast, options) {
         }
         if (
           declared &&
-          (!keep_quoted_strict || !node.quote)
+          (!keep_quoted || !node.quote)
         ) {
           add(node.property);
         }
       } else if (node instanceof AST_Sub) {
-        if (!keep_quoted_strict) {
+        if (!keep_quoted) {
           addStrings(node.property, add);
         }
       } else if (
@@ -289,28 +321,26 @@ function mangle_properties(ast, options) {
     new TreeTransformer(function (node) {
       if (
         node instanceof AST_ClassPrivateProperty ||
-        node instanceof AST_PrivateMethod
+        node instanceof AST_PrivateMethod ||
+        node instanceof AST_PrivateGetter ||
+        node instanceof AST_PrivateSetter ||
+        node instanceof AST_DotHash
       ) {
-        node.key.name = mangle_private(node.key.name);
-      } else if (node instanceof AST_DotHash) {
-        node.property = mangle_private(node.property);
+        // handled by mangle_private_properties
       } else if (node instanceof AST_ObjectKeyVal) {
-        if (
-          typeof node.key == "string" &&
-          (!keep_quoted_strict || !node.quote)
-        ) {
+        if (typeof node.key == "string" && (!keep_quoted || !node.quote)) {
           node.key = mangle(node.key);
         }
       } else if (node instanceof AST_ObjectProperty) {
         // setter, getter, method or class field
-        if (!keep_quoted_strict || !node.key.end.quote) {
+        if (!keep_quoted || !node.quote) {
           node.key.name = mangle(node.key.name);
         }
       } else if (node instanceof AST_Dot) {
-        if (!keep_quoted_strict || !node.quote) {
+        if (!keep_quoted || !node.quote) {
           node.property = mangle(node.property);
         }
-      } else if (!options.keep_quoted && node instanceof AST_Sub) {
+      } else if (!keep_quoted && node instanceof AST_Sub) {
         node.property = mangleStrings(node.property);
       } else if (
         node instanceof AST_Call &&
@@ -371,22 +401,12 @@ function mangle_properties(ast, options) {
       // either debug mode is off, or it is on and we could not use the mangled name
       if (!mangled) {
         do {
-          mangled = base54(++cname);
+          mangled = nth_identifier.get(++cname);
         } while (!can_mangle(mangled));
       }
 
       cache.set(name, mangled);
     }
-    return mangled;
-  }
-
-  function mangle_private(name) {
-    let mangled = private_cache.get(name);
-    if (!mangled) {
-      mangled = base54(++cprivate);
-      private_cache.set(name, mangled);
-    }
-
     return mangled;
   }
 
@@ -408,4 +428,4 @@ function mangle_properties(ast, options) {
   }
 }
 
-export { mangle_properties, reserve_quoted_keys };
+export { mangle_private_properties, mangle_properties, reserve_quoted_keys };

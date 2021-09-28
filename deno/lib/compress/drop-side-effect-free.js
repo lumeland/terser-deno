@@ -72,12 +72,15 @@ import {
   AST_TemplateString,
   AST_This,
   AST_Unary,
-  AST_Undefined,
 } from "../ast.js";
 import { make_node, return_null, return_this } from "../utils/index.js";
 import { first_in_statement } from "../utils/first_in_statement.js";
 import { pure_prop_access_globals } from "./native-objects.js";
-import { is_nullish, lazy_op, unary_side_effects } from "./inference.js";
+import {
+  is_nullish_shortcircuited,
+  lazy_op,
+  unary_side_effects,
+} from "./inference.js";
 import { clear_flag, set_flag, WRITE_ONLY } from "./compressor-flags.js";
 import { is_func_expr, is_iife_call, make_sequence } from "./common.js";
 
@@ -119,8 +122,11 @@ def_drop_side_effect_free(AST_Constant, return_null);
 def_drop_side_effect_free(AST_This, return_null);
 
 def_drop_side_effect_free(AST_Call, function (compressor, first_in_statement) {
-  if (this.optional && is_nullish(this.expression, compressor)) {
-    return make_node(AST_Undefined, this);
+  if (is_nullish_shortcircuited(this, compressor)) {
+    return this.expression.drop_side_effect_free(
+      compressor,
+      first_in_statement,
+    );
   }
 
   if (!this.is_callee_pure(compressor)) {
@@ -335,27 +341,25 @@ def_drop_side_effect_free(AST_Array, function (compressor, first_in_statement) {
 });
 
 def_drop_side_effect_free(AST_Dot, function (compressor, first_in_statement) {
-  if (this.optional) {
-    return is_nullish(this.expression, compressor)
-      ? make_node(AST_Undefined, this)
-      : this;
+  if (is_nullish_shortcircuited(this, compressor)) {
+    return this.expression.drop_side_effect_free(
+      compressor,
+      first_in_statement,
+    );
   }
-  if (this.expression.may_throw_on_access(compressor)) {
-    return this;
-  }
+  if (this.expression.may_throw_on_access(compressor)) return this;
 
   return this.expression.drop_side_effect_free(compressor, first_in_statement);
 });
 
 def_drop_side_effect_free(AST_Sub, function (compressor, first_in_statement) {
-  if (this.optional) {
-    return is_nullish(this.expression, compressor)
-      ? make_node(AST_Undefined, this)
-      : this;
+  if (is_nullish_shortcircuited(this, compressor)) {
+    return this.expression.drop_side_effect_free(
+      compressor,
+      first_in_statement,
+    );
   }
-  if (this.expression.may_throw_on_access(compressor)) {
-    return this;
-  }
+  if (this.expression.may_throw_on_access(compressor)) return this;
 
   var expression = this.expression.drop_side_effect_free(
     compressor,
