@@ -5,7 +5,7 @@
 [![Travis Build][travis-image]][travis-url]
 [![Opencollective financial contributors][opencollective-contributors]][opencollective-url]
 
-A JavaScript parser and mangler/compressor toolkit for ES6+.
+A JavaScript mangler/compressor toolkit for ES6+.
 
 _note_: You can support this project on patreon:
 <a target="_blank" rel="nofollow" href="https://www.patreon.com/fabiosantoscode"><img src="https://c5.patreon.com/external/logo/become_a_patron_button@2x.png" alt="patron" width="100px" height="auto"></a>.
@@ -65,6 +65,12 @@ and apply any compression options. The files are parsed in the same global
 scope, that is, a reference from a file to some variable/function declared in
 another file will be matched properly.
 
+Command line arguments that take options (like --parse, --compress, --mangle and
+--format) can take in a comma-separated list of default option overrides. For
+instance:
+
+    terser input.js --compress ecma=2015,computed_props=false
+
 If no input file is specified, Terser will read from STDIN.
 
 If you wish to pass your options before the input files, separate the two with a
@@ -76,108 +82,108 @@ double dash to prevent input files being used as option arguments:
 
 ```
 -h, --help                  Print usage information.
-                                `--help options` for details on available options.
-    -V, --version               Print version number.
-    -p, --parse <options>       Specify parser options:
-                                `acorn`  Use Acorn for parsing.
-                                `bare_returns`  Allow return outside of functions.
-                                                Useful when minifying CommonJS
-                                                modules and Userscripts that may
-                                                be anonymous function wrapped (IIFE)
-                                                by the .user.js engine `caller`.
-                                `expression`  Parse a single expression, rather than
-                                              a program (for parsing JSON).
-                                `spidermonkey`  Assume input files are SpiderMonkey
-                                                AST format (as JSON).
-    -c, --compress [options]    Enable compressor/specify compressor options:
-                                `pure_funcs`  List of functions that can be safely
-                                              removed when their return values are
-                                              not used.
-    -m, --mangle [options]      Mangle names/specify mangler options:
-                                `reserved`  List of names that should not be mangled.
-    --mangle-props [options]    Mangle properties/specify mangler options:
-                                `builtins`  Mangle property names that overlaps
-                                            with standard JavaScript globals and DOM
-                                            API props.
-                                `debug`  Add debug prefix and suffix.
-                                `keep_quoted`  Only mangle unquoted properties, quoted
-                                               properties are automatically reserved.
-                                               `strict` disables quoted properties
-                                               being automatically reserved.
-                                `regex`  Only mangle matched property names.
-                                `reserved`  List of names that should not be mangled.
-    -f, --format [options]      Specify format options.
-                                `preamble`  Preamble to prepend to the output. You
-                                            can use this to insert a comment, for
-                                            example for licensing information.
-                                            This will not be parsed, but the source
-                                            map will adjust for its presence.
-                                `quote_style`  Quote style:
-                                               0 - auto
-                                               1 - single
-                                               2 - double
-                                               3 - original
-                                `wrap_iife`  Wrap IIFEs in parenthesis. Note: you may
-                                             want to disable `negate_iife` under
-                                             compressor options.
-                                `wrap_func_args`  Wrap function arguments in parenthesis.
-    -o, --output <file>         Output file path (default STDOUT). Specify `ast` or
-                                `spidermonkey` to write Terser or SpiderMonkey AST
-                                as JSON to STDOUT respectively.
-    --comments [filter]         Preserve copyright comments in the output. By
-                                default this works like Google Closure, keeping
-                                JSDoc-style comments that contain "@license" or
-                                "@preserve". You can optionally pass one of the
-                                following arguments to this flag:
-                                - "all" to keep all comments
-                                - `false` to omit comments in the output
-                                - a valid JS RegExp like `/foo/` or `/^!/` to
-                                keep only matching comments.
-                                Note that currently not *all* comments can be
-                                kept when compression is on, because of dead
-                                code removal or cascading statements into
-                                sequences.
-    --config-file <file>        Read `minify()` options from JSON file.
-    -d, --define <expr>[=value] Global definitions.
-    --ecma <version>            Specify ECMAScript release: 5, 2015, 2016, etc.
-    -e, --enclose [arg[:value]] Embed output in a big function with configurable
-                                arguments and values.
-    --ie8                       Support non-standard Internet Explorer 8.
-                                Equivalent to setting `ie8: true` in `minify()`
-                                for `compress`, `mangle` and `format` options.
-                                By default Terser will not try to be IE-proof.
-    --keep-classnames           Do not mangle/drop class names.
-    --keep-fnames               Do not mangle/drop function names.  Useful for
-                                code relying on Function.prototype.name.
-    --module                    Input is an ES6 module. If `compress` or `mangle` is
-                                enabled then the `toplevel` option will be enabled.
-    --name-cache <file>         File to hold mangled name mappings.
-    --safari10                  Support non-standard Safari 10/11.
-                                Equivalent to setting `safari10: true` in `minify()`
-                                for `mangle` and `format` options.
-                                By default `terser` will not work around
-                                Safari 10/11 bugs.
-    --source-map [options]      Enable source map/specify source map options:
-                                `base`  Path to compute relative paths from input files.
-                                `content`  Input source map, useful if you're compressing
-                                           JS that was generated from some other original
-                                           code. Specify "inline" if the source map is
-                                           included within the sources.
-                                `filename`  Name and/or location of the output source.
-                                `includeSources`  Pass this flag if you want to include
-                                                  the content of source files in the
-                                                  source map as sourcesContent property.
-                                `root`  Path to the original source to be included in
-                                        the source map.
-                                `url`  If specified, path to the source map to append in
-                                       `//# sourceMappingURL`.
-    --timings                   Display operations run time on STDERR.
-    --toplevel                  Compress and/or mangle variables in top level scope.
-    --wrap <name>               Embed everything in a big function, making the
-                                “exports” and “global” variables available. You
-                                need to pass an argument to this option to
-                                specify the name that your module will take
-                                when included in, say, a browser.
+                            `--help options` for details on available options.
+-V, --version               Print version number.
+-p, --parse <options>       Specify parser options:
+                            `acorn`  Use Acorn for parsing.
+                            `bare_returns`  Allow return outside of functions.
+                                            Useful when minifying CommonJS
+                                            modules and Userscripts that may
+                                            be anonymous function wrapped (IIFE)
+                                            by the .user.js engine `caller`.
+                            `expression`  Parse a single expression, rather than
+                                          a program (for parsing JSON).
+                            `spidermonkey`  Assume input files are SpiderMonkey
+                                            AST format (as JSON).
+-c, --compress [options]    Enable compressor/specify compressor options:
+                            `pure_funcs`  List of functions that can be safely
+                                          removed when their return values are
+                                          not used.
+-m, --mangle [options]      Mangle names/specify mangler options:
+                            `reserved`  List of names that should not be mangled.
+--mangle-props [options]    Mangle properties/specify mangler options:
+                            `builtins`  Mangle property names that overlaps
+                                        with standard JavaScript globals and DOM
+                                        API props.
+                            `debug`  Add debug prefix and suffix.
+                            `keep_quoted`  Only mangle unquoted properties, quoted
+                                           properties are automatically reserved.
+                                           `strict` disables quoted properties
+                                           being automatically reserved.
+                            `regex`  Only mangle matched property names.
+                            `reserved`  List of names that should not be mangled.
+-f, --format [options]      Specify format options.
+                            `preamble`  Preamble to prepend to the output. You
+                                        can use this to insert a comment, for
+                                        example for licensing information.
+                                        This will not be parsed, but the source
+                                        map will adjust for its presence.
+                            `quote_style`  Quote style:
+                                           0 - auto
+                                           1 - single
+                                           2 - double
+                                           3 - original
+                            `wrap_iife`  Wrap IIFEs in parenthesis. Note: you may
+                                         want to disable `negate_iife` under
+                                         compressor options.
+                            `wrap_func_args`  Wrap function arguments in parenthesis.
+-o, --output <file>         Output file path (default STDOUT). Specify `ast` or
+                            `spidermonkey` to write Terser or SpiderMonkey AST
+                            as JSON to STDOUT respectively.
+--comments [filter]         Preserve copyright comments in the output. By
+                            default this works like Google Closure, keeping
+                            JSDoc-style comments that contain e.g. "@license",
+                            or start with "!". You can optionally pass one of the
+                            following arguments to this flag:
+                            - "all" to keep all comments
+                            - `false` to omit comments in the output
+                            - a valid JS RegExp like `/foo/` or `/^!/` to
+                            keep only matching comments.
+                            Note that currently not *all* comments can be
+                            kept when compression is on, because of dead
+                            code removal or cascading statements into
+                            sequences.
+--config-file <file>        Read `minify()` options from JSON file.
+-d, --define <expr>[=value] Global definitions.
+--ecma <version>            Specify ECMAScript release: 5, 2015, 2016, etc.
+-e, --enclose [arg[:value]] Embed output in a big function with configurable
+                            arguments and values.
+--ie8                       Support non-standard Internet Explorer 8.
+                            Equivalent to setting `ie8: true` in `minify()`
+                            for `compress`, `mangle` and `format` options.
+                            By default Terser will not try to be IE-proof.
+--keep-classnames           Do not mangle/drop class names.
+--keep-fnames               Do not mangle/drop function names.  Useful for
+                            code relying on Function.prototype.name.
+--module                    Input is an ES6 module. If `compress` or `mangle` is
+                            enabled then the `toplevel` option will be enabled.
+--name-cache <file>         File to hold mangled name mappings.
+--safari10                  Support non-standard Safari 10/11.
+                            Equivalent to setting `safari10: true` in `minify()`
+                            for `mangle` and `format` options.
+                            By default `terser` will not work around
+                            Safari 10/11 bugs.
+--source-map [options]      Enable source map/specify source map options:
+                            `base`  Path to compute relative paths from input files.
+                            `content`  Input source map, useful if you're compressing
+                                       JS that was generated from some other original
+                                       code. Specify "inline" if the source map is
+                                       included within the sources.
+                            `filename`  Name and/or location of the output source.
+                            `includeSources`  Pass this flag if you want to include
+                                              the content of source files in the
+                                              source map as sourcesContent property.
+                            `root`  Path to the original source to be included in
+                                    the source map.
+                            `url`  If specified, path to the source map to append in
+                                   `//# sourceMappingURL`.
+--timings                   Display operations run time on STDERR.
+--toplevel                  Compress and/or mangle variables in top level scope.
+--wrap <name>               Embed everything in a big function, making the
+                            “exports” and “global” variables available. You
+                            need to pass an argument to this option to
+                            specify the name that your module will take
+                            when included in, say, a browser.
 ```
 
 Specify `--output` (`-o`) to declare the output file. Otherwise the output goes
@@ -1073,9 +1079,9 @@ These options control the format of Terser's output code. Previously known as
   `while` or `with` statements, even if their body is a single statement.
 
 - `comments` (default `"some"`) -- by default it keeps JSDoc-style comments that
-  contain "@license", "@preserve" or start with `!`, pass `true` or `"all"` to
-  preserve all comments, `false` to omit comments in the output, a regular
-  expression string (e.g. `/^!/`) or a function.
+  contain "@license", "@copyright", "@preserve" or start with `!`, pass `true`
+  or `"all"` to preserve all comments, `false` to omit comments in the output, a
+  regular expression string (e.g. `/^!/`) or a function.
 
 - `ecma` (default `5`) -- set desired EcmaScript standard version for output.
   Set `ecma` to `2015` or greater to emit shorthand object properties - i.e.:
@@ -1146,11 +1152,11 @@ These options control the format of Terser's output code. Previously known as
 ### Keeping copyright notices or other comments
 
 You can pass `--comments` to retain certain comments in the output. By default
-it will keep JSDoc-style comments that contain "@preserve", "@license" or
-"@cc_on" (conditional compilation for IE). You can pass `--comments all` to keep
-all the comments, or a valid JavaScript regexp to keep only comments that match
-this regexp. For example `--comments /^!/` will keep comments like
-`/*! Copyright Notice */`.
+it will keep comments starting with "!" and JSDoc-style comments that contain
+"@preserve", "@copyright", "@license" or "@cc_on" (conditional compilation for
+IE). You can pass `--comments all` to keep all the comments, or a valid
+JavaScript regexp to keep only comments that match this regexp. For example
+`--comments /^!/` will keep comments like `/*! Copyright Notice */`.
 
 Note, however, that there might be situations where comments are lost. For
 example:
@@ -1392,8 +1398,8 @@ can add the following alias to your project's `package.json` file:
 
 ```js
 "resolutions": {
-    "uglify-es": "npm:terser"
-  }
+  "uglify-es": "npm:terser"
+}
 ```
 
 to use `terser` instead of `uglify-es` in all deeply nested dependencies without
@@ -1415,6 +1421,26 @@ In the terser CLI we use
 [source-map-support](https://npmjs.com/source-map-support) to produce good error
 stacks. In your own app, you're expected to enable source-map-support (read
 their docs) to have nice stack traces that will help you write good issues.
+
+## Obtaining the source code given to Terser
+
+Because users often don't control the call to `await minify()` or its arguments,
+Terser provides a `TERSER_DEBUG_DIR` environment variable to make terser output
+some debug logs. If you're using a bundler or a project that includes a bundler
+and are not sure what went wrong with your code, pass that variable like so:
+
+```
+$ TERSER_DEBUG_DIR=/path/to/logs command-that-uses-terser
+$ ls /path/to/logs
+terser-debug-123456.log
+```
+
+If you're not sure how to set an environment variable on your shell (the above
+example works in bash), you can try using cross-env:
+
+```
+> npx cross-env TERSER_DEBUG_DIR=/path/to/logs command-that-uses-terser
+```
 
 # README.md Patrons:
 

@@ -1373,7 +1373,7 @@ function parse($TEXT, options) {
             !is_token(peek(), "punc", ".")
           ) {
             next();
-            var node = import_();
+            var node = import_statement();
             semicolon();
             return node;
           }
@@ -1529,7 +1529,7 @@ function parse($TEXT, options) {
             case "export":
               if (!is_token(peek(), "punc", "(")) {
                 next();
-                var node = export_();
+                var node = export_statement();
                 if (is("punc", ";")) semicolon();
                 return node;
               }
@@ -2857,7 +2857,7 @@ function parse($TEXT, options) {
 
     const is_not_method_start = () =>
       !is("punc", "(") && !is("punc", ",") && !is("punc", "}") &&
-      !is("operator", "=");
+      !is("punc", ";") && !is("operator", "=");
 
     var is_async = false;
     var is_static = false;
@@ -2975,7 +2975,15 @@ function parse($TEXT, options) {
     }
   }
 
-  function import_() {
+  function maybe_import_assertion() {
+    if (is("name", "assert") && !has_newline_before(S.token)) {
+      next();
+      return object_or_destructuring_();
+    }
+    return null;
+  }
+
+  function import_statement() {
     var start = prev();
 
     var imported_name;
@@ -2998,16 +3006,20 @@ function parse($TEXT, options) {
       unexpected();
     }
     next();
+
+    const assert_clause = maybe_import_assertion();
+
     return new AST_Import({
-      start: start,
-      imported_name: imported_name,
-      imported_names: imported_names,
+      start,
+      imported_name,
+      imported_names,
       module_name: new AST_String({
         start: mod_str,
         value: mod_str.value,
         quote: mod_str.quote,
         end: mod_str,
       }),
+      assert_clause,
       end: S.token,
     });
   }
@@ -3124,7 +3136,7 @@ function parse($TEXT, options) {
     return names;
   }
 
-  function export_() {
+  function export_statement() {
     var start = S.token;
     var is_default;
     var exported_names;
@@ -3142,6 +3154,8 @@ function parse($TEXT, options) {
         }
         next();
 
+        const assert_clause = maybe_import_assertion();
+
         return new AST_Export({
           start: start,
           is_default: is_default,
@@ -3153,6 +3167,7 @@ function parse($TEXT, options) {
             end: mod_str,
           }),
           end: prev(),
+          assert_clause,
         });
       } else {
         return new AST_Export({
@@ -3202,6 +3217,7 @@ function parse($TEXT, options) {
       exported_value: exported_value,
       exported_definition: exported_definition,
       end: prev(),
+      assert_clause: null,
     });
   }
 

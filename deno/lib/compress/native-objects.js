@@ -153,6 +153,7 @@ export const is_pure_native_fn = make_nested_lookup({
     "isExtensible",
     "isFrozen",
     "isSealed",
+    "hasOwn",
     "keys",
   ],
   String: [

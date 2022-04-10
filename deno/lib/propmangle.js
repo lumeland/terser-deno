@@ -255,7 +255,7 @@ function mangle_properties(ast, options) {
   var debug = options.debug !== false;
   var debug_name_suffix;
   if (debug) {
-    debug_name_suffix = (options.debug === true ? "" : options.debug);
+    debug_name_suffix = options.debug === true ? "" : options.debug;
   }
 
   var names_to_mangle = new Set();

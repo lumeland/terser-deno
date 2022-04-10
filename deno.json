@@ -1,0 +1,9 @@
+{
+  "tasks": {
+    "clean": "rm -rf deno && rm -rf terser",
+    "clone": "git clone --depth 1 --branch master https://github.com/terser/terser.git",
+    "todeno": "deno run --unstable --allow-read=. --allow-write=. to_deno.js",
+    "format": "deno fmt deno",
+    "build": "deno task clean && deno task clone && deno task todeno && deno task format"
+  }
+}
