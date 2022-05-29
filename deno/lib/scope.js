@@ -610,10 +610,9 @@ AST_Scope.DEFMETHOD("create_symbol", function (SymClass, {
 
   if (tentative_name) {
     // Implement hygiene (no new names are conflicting with existing names)
-    tentative_name = symbol_name = tentative_name.replace(
-      /(?:^[^a-z_$]|[^a-z0-9_$])/ig,
-      "_",
-    );
+    tentative_name =
+      symbol_name =
+        tentative_name.replace(/(?:^[^a-z_$]|[^a-z0-9_$])/ig, "_");
 
     let i = 0;
     while (

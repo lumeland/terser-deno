@@ -962,33 +962,35 @@ import { is_basic_identifier_string } from "./parse.js";
     },
   };
 
-  MOZ_TO_ME.UpdateExpression = MOZ_TO_ME.UnaryExpression =
-    function To_Moz_Unary(M) {
-      var prefix = "prefix" in M
-        ? M.prefix
-        : M.type == "UnaryExpression"
-        ? true
-        : false;
-      return new (prefix ? AST_UnaryPrefix : AST_UnaryPostfix)({
-        start: my_start_token(M),
-        end: my_end_token(M),
-        operator: M.operator,
-        expression: from_moz(M.argument),
-      });
-    };
+  MOZ_TO_ME.UpdateExpression =
+    MOZ_TO_ME.UnaryExpression =
+      function To_Moz_Unary(M) {
+        var prefix = "prefix" in M
+          ? M.prefix
+          : M.type == "UnaryExpression"
+          ? true
+          : false;
+        return new (prefix ? AST_UnaryPrefix : AST_UnaryPostfix)({
+          start: my_start_token(M),
+          end: my_end_token(M),
+          operator: M.operator,
+          expression: from_moz(M.argument),
+        });
+      };
 
-  MOZ_TO_ME.ClassDeclaration = MOZ_TO_ME.ClassExpression =
-    function From_Moz_Class(M) {
-      return new (M.type === "ClassDeclaration"
-        ? AST_DefClass
-        : AST_ClassExpression)({
-        start: my_start_token(M),
-        end: my_end_token(M),
-        name: from_moz(M.id),
-        extends: from_moz(M.superClass),
-        properties: M.body.body.map(from_moz),
-      });
-    };
+  MOZ_TO_ME.ClassDeclaration =
+    MOZ_TO_ME.ClassExpression =
+      function From_Moz_Class(M) {
+        return new (M.type === "ClassDeclaration"
+          ? AST_DefClass
+          : AST_ClassExpression)({
+          start: my_start_token(M),
+          end: my_end_token(M),
+          name: from_moz(M.id),
+          extends: from_moz(M.superClass),
+          properties: M.body.body.map(from_moz),
+        });
+      };
 
   def_to_moz(AST_EmptyStatement, function To_Moz_EmptyStatement() {
     return {

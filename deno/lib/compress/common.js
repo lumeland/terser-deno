@@ -78,6 +78,9 @@ import {
   AST_UnaryPrefix,
   AST_Undefined,
   TreeWalker,
+  walk,
+  walk_abort,
+  walk_parent,
 } from "../ast.js";
 import {
   make_node,
@@ -86,6 +89,7 @@ import {
   string_template,
 } from "../utils/index.js";
 import { first_in_statement } from "../utils/first_in_statement.js";
+import { has_flag, TOP } from "./compressor-flags.js";
 
 export function merge_sequence(array, node) {
   if (node instanceof AST_Sequence) {
@@ -258,6 +262,13 @@ export function is_iife_call(node) {
     is_iife_call(node.expression);
 }
 
+export function is_empty(thing) {
+  if (thing === null) return true;
+  if (thing instanceof AST_EmptyStatement) return true;
+  if (thing instanceof AST_BlockStatement) return thing.body.length == 0;
+  return false;
+}
+
 export const identifier_atom = makePredicate("Infinity NaN undefined");
 export function is_identifier_atom(node) {
   return node instanceof AST_Infinity ||
@@ -296,6 +307,34 @@ export function as_statement_array(thing) {
   throw new Error("Can't convert thing to statement array");
 }
 
+export function is_reachable(scope_node, defs) {
+  const find_ref = (node) => {
+    if (node instanceof AST_SymbolRef && defs.includes(node.definition())) {
+      return walk_abort;
+    }
+  };
+
+  return walk_parent(scope_node, (node, info) => {
+    if (node instanceof AST_Scope && node !== scope_node) {
+      var parent = info.parent();
+
+      if (
+        parent instanceof AST_Call &&
+        parent.expression === node &&
+        // Async/Generators aren't guaranteed to sync evaluate all of
+        // their body steps, so it's possible they close over the variable.
+        !(node.async || node.is_generator)
+      ) {
+        return;
+      }
+
+      if (walk(node, find_ref)) return walk_abort;
+
+      return true;
+    }
+  });
+}
+
 /** Check if a ref refers to the name of a function/class it's defined within */
 export function is_recursive_ref(compressor, def) {
   var node;
@@ -308,4 +347,13 @@ export function is_recursive_ref(compressor, def) {
     }
   }
   return false;
+}
+
+// TODO this only works with AST_Defun, shouldn't it work for other ways of defining functions?
+export function retain_top_func(fn, compressor) {
+  return compressor.top_retain &&
+    fn instanceof AST_Defun &&
+    has_flag(fn, TOP) &&
+    fn.name &&
+    compressor.top_retain(fn.name);
 }

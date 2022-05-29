@@ -115,6 +115,7 @@ AST_Directive.prototype._size = function () {
   return 2 + this.value.length;
 };
 
+/** Count commas/semicolons necessary to show a list of expressions/statements */
 const list_overhead = (array) => array.length && array.length - 1;
 
 AST_Block.prototype._size = function () {
@@ -170,7 +171,7 @@ AST_Arrow.prototype._size = function () {
       this.argnames[0] instanceof AST_Symbol
     )
   ) {
-    args_and_arrow += 2;
+    args_and_arrow += 2; // parens around the args
   }
 
   const body_overhead = this.is_braceless() ? 0 : list_overhead(this.body) + 2;
@@ -232,19 +233,16 @@ AST_Finally.prototype._size = function () {
   return 7 + list_overhead(this.body);
 };
 
-/*#__INLINE__*/
-const def_size = (size, def) => size + list_overhead(def.definitions);
-
 AST_Var.prototype._size = function () {
-  return def_size(4, this);
+  return 4 + list_overhead(this.definitions);
 };
 
 AST_Let.prototype._size = function () {
-  return def_size(4, this);
+  return 4 + list_overhead(this.definitions);
 };
 
 AST_Const.prototype._size = function () {
-  return def_size(6, this);
+  return 6 + list_overhead(this.definitions);
 };
 
 AST_VarDef.prototype._size = function () {
@@ -394,10 +392,11 @@ AST_PrivateMethod.prototype._size = function () {
   return AST_ConciseMethod.prototype._size.call(this) + 1;
 };
 
-AST_PrivateGetter.prototype._size = AST_PrivateSetter.prototype._size =
-  function () {
-    return AST_ConciseMethod.prototype._size.call(this) + 4;
-  };
+AST_PrivateGetter.prototype._size =
+  AST_PrivateSetter.prototype._size =
+    function () {
+      return AST_ConciseMethod.prototype._size.call(this) + 4;
+    };
 
 AST_Class.prototype._size = function () {
   return (
@@ -429,16 +428,17 @@ AST_SymbolClassProperty.prototype._size = function () {
   return this.name.length;
 };
 
-AST_SymbolRef.prototype._size = AST_SymbolDeclaration.prototype._size =
-  function () {
-    const { name, thedef } = this;
+AST_SymbolRef.prototype._size =
+  AST_SymbolDeclaration.prototype._size =
+    function () {
+      const { name, thedef } = this;
 
-    if (thedef && thedef.global) return name.length;
+      if (thedef && thedef.global) return name.length;
 
-    if (name === "arguments") return 9;
+      if (name === "arguments") return 9;
 
-    return AST_Symbol.prototype._size.call(this);
-  };
+      return AST_Symbol.prototype._size.call(this);
+    };
 
 AST_NewTarget.prototype._size = () => 10;
 
@@ -481,7 +481,7 @@ AST_NaN.prototype._size = () => 3;
 
 AST_Undefined.prototype._size = () => 6; // "void 0"
 
-AST_Hole.prototype._size = () => 0; // comma is taken into account
+AST_Hole.prototype._size = () => 0; // comma is taken into account by list_overhead()
 
 AST_Infinity.prototype._size = () => 8;
 

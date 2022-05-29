@@ -609,11 +609,10 @@ var AST_With = DEFNODE("With", "expression", function AST_With(props) {
 
 var AST_Scope = DEFNODE(
   "Scope",
-  "variables functions uses_with uses_eval parent_scope enclosed cname",
+  "variables uses_with uses_eval parent_scope enclosed cname",
   function AST_Scope(props) {
     if (props) {
       this.variables = props.variables;
-      this.functions = props.functions;
       this.uses_with = props.uses_with;
       this.uses_eval = props.uses_eval;
       this.parent_scope = props.parent_scope;
@@ -674,7 +673,6 @@ var AST_Toplevel = DEFNODE("Toplevel", "globals", function AST_Toplevel(props) {
   if (props) {
     this.globals = props.globals;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -767,7 +765,6 @@ var AST_Lambda = DEFNODE(
       this.is_generator = props.is_generator;
       this.async = props.async;
       this.variables = props.variables;
-      this.functions = props.functions;
       this.uses_with = props.uses_with;
       this.uses_eval = props.uses_eval;
       this.parent_scope = props.parent_scope;
@@ -851,7 +848,6 @@ var AST_Accessor = DEFNODE("Accessor", null, function AST_Accessor(props) {
     this.is_generator = props.is_generator;
     this.async = props.async;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -877,7 +873,6 @@ var AST_Function = DEFNODE("Function", null, function AST_Function(props) {
     this.is_generator = props.is_generator;
     this.async = props.async;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -902,7 +897,6 @@ var AST_Arrow = DEFNODE("Arrow", null, function AST_Arrow(props) {
     this.is_generator = props.is_generator;
     this.async = props.async;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -927,7 +921,6 @@ var AST_Defun = DEFNODE("Defun", null, function AST_Defun(props) {
     this.is_generator = props.is_generator;
     this.async = props.async;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -2405,7 +2398,6 @@ var AST_Class = DEFNODE(
       this.extends = props.extends;
       this.properties = props.properties;
       this.variables = props.variables;
-      this.functions = props.functions;
       this.uses_with = props.uses_with;
       this.uses_eval = props.uses_eval;
       this.parent_scope = props.parent_scope;
@@ -2516,7 +2508,6 @@ var AST_DefClass = DEFNODE("DefClass", null, function AST_DefClass(props) {
     this.extends = props.extends;
     this.properties = props.properties;
     this.variables = props.variables;
-    this.functions = props.functions;
     this.uses_with = props.uses_with;
     this.uses_eval = props.uses_eval;
     this.parent_scope = props.parent_scope;
@@ -2542,7 +2533,6 @@ var AST_ClassExpression = DEFNODE(
       this.extends = props.extends;
       this.properties = props.properties;
       this.variables = props.variables;
-      this.functions = props.functions;
       this.uses_with = props.uses_with;
       this.uses_eval = props.uses_eval;
       this.parent_scope = props.parent_scope;
@@ -3231,6 +3221,21 @@ function walk(node, cb, to_visit = [node]) {
   return false;
 }
 
+/**
+ * Walks an AST node and its children.
+ *
+ * {cb} can return `walk_abort` to interrupt the walk.
+ *
+ * @param node
+ * @param cb {(node, info: { parent: (nth) => any }) => (boolean | undefined)}
+ *
+ * @returns {boolean} whether the walk was aborted
+ *
+ * @example
+ * const found_some_cond = walk_parent(my_ast_node, (node, { parent }) => {
+ *   if (some_cond(node, parent())) return walk_abort
+ * });
+ */
 function walk_parent(node, cb, initial_stack) {
   const to_visit = [node];
   const push = to_visit.push.bind(to_visit);
@@ -3351,6 +3356,15 @@ class TreeWalker {
     for (var i = stack.length; --i >= 0;) {
       var x = stack[i];
       if (x instanceof type) return x;
+    }
+  }
+
+  find_scope() {
+    for (let i = 0;; i++) {
+      const p = this.parent(i);
+      if (p instanceof AST_Toplevel) return p;
+      if (p instanceof AST_Lambda) return p;
+      if (p.block_scope) return p.block_scope;
     }
   }
 

@@ -249,6 +249,8 @@ function OutputStream(options) {
     width: 80,
     wrap_iife: false,
     wrap_func_args: true,
+
+    _destroy_ast: false,
   }, true);
 
   if (options.shorthand === undefined) {
@@ -824,9 +826,8 @@ function OutputStream(options) {
     var comments = token[tail ? "comments_before" : "comments_after"];
     if (!comments || printed_comments.has(comments)) return;
     if (
-      !(node instanceof AST_Statement || comments.every((c) =>
-        !/comment[134]/.test(c.type)
-      ))
+      !(node instanceof AST_Statement ||
+        comments.every((c) => !/comment[134]/.test(c.type)))
     ) {
       return;
     }
@@ -862,6 +863,17 @@ function OutputStream(options) {
     });
     if (OUTPUT.length() > insert) newline_insert = insert;
   }
+
+  /**
+   * When output.option("_destroy_ast") is enabled, destroy the function.
+   * Call this after printing it.
+   */
+  const gc_scope = options["_destroy_ast"]
+    ? function gc_scope(scope) {
+      scope.body.length = 0;
+      scope.argnames.length = 0;
+    }
+    : noop;
 
   var stack = [];
   return {
@@ -923,6 +935,7 @@ function OutputStream(options) {
     option: function (opt) {
       return options[opt];
     },
+    gc_scope,
     printed_comments: printed_comments,
     prepend_comments: readonly ? noop : prepend_comments,
     append_comments: readonly || comment_filter === return_false
@@ -1482,6 +1495,7 @@ function OutputStream(options) {
   });
   DEFPRINT(AST_Lambda, function (self, output) {
     self._do_print(output);
+    output.gc_scope(self);
   });
 
   DEFPRINT(AST_PrefixedTemplateString, function (self, output) {
@@ -1562,6 +1576,7 @@ function OutputStream(options) {
       print_braced(self, output);
     }
     if (needs_parens) output.print(")");
+    output.gc_scope(self);
   });
 
   /* -----[ exits ]----- */
